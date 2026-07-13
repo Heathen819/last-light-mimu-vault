@@ -1574,6 +1574,35 @@ button.menu-dropdown-item {
   color: var(--success);
 }
 
+/* ---------- Proximity map (torch-lit area around player) ---------- */
+.proximity-map-wrap {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  z-index: 4;
+  width: 148px;
+  height: 148px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid rgba(255, 200, 87, 0.28);
+  background: #03020a;
+  box-shadow:
+    0 4px 18px rgba(0, 0, 0, 0.55),
+    inset 0 0 24px rgba(0, 0, 0, 0.65);
+  pointer-events: none;
+  line-height: 0;
+}
+
+.proximity-map-wrap.is-hidden {
+  display: none;
+}
+
+#proximity-map {
+  display: block;
+  width: 148px;
+  height: 148px;
+}
+
 #world-prompt {
   position: absolute;
   left: 50%;
@@ -1778,6 +1807,18 @@ button.menu-dropdown-item {
     padding: 6px 10px;
     gap: 6px;
     font-size: 0.92rem;
+  }
+
+  .proximity-map-wrap {
+    bottom: 8px;
+    right: 8px;
+    width: 120px;
+    height: 120px;
+  }
+
+  #proximity-map {
+    width: 120px;
+    height: 120px;
   }
 
   #light-meter-wrap {

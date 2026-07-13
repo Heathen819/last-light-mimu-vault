@@ -8,6 +8,7 @@ import { createEnemySprite } from "./enemysprite.js?v=null2";
 import { initMenuDrawer, recordLeaderboardRun } from "./site-nav.js?v=auth_9";
 import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
 import { musicPlayer } from "./music-player.js?v=1";
+import { createProximityMap } from "./proximity-map.js?v=1";
 
 (() => {
   "use strict";
@@ -180,6 +181,8 @@ import { musicPlayer } from "./music-player.js?v=1";
   const overlayMessageEl = document.getElementById("overlay-message");
   const restartBtn = document.getElementById("restart-btn");
   const promptEl = document.getElementById("world-prompt");
+  const proxMapWrapEl = document.getElementById("proximity-map-wrap");
+  const proxMapCanvas = document.getElementById("proximity-map");
 
   const mainMenuEl = document.getElementById("main-menu");
   const menuLogoVideoEl = document.getElementById("menu-logo-video");
@@ -452,6 +455,14 @@ import { musicPlayer } from "./music-player.js?v=1";
 
   const MAP_ROWS = LEVEL_MAP.length;
   const MAP_COLS = LEVEL_MAP[0].length;
+
+  const proximityMap = proxMapCanvas
+    ? createProximityMap(proxMapCanvas, {
+        levelMap: LEVEL_MAP,
+        mapRows: MAP_ROWS,
+        mapCols: MAP_COLS,
+      })
+    : null;
 
   // Choose the initial randomized-but-fair entity layout.
   ({ lanterns: activeLanternCells, nulls: activeNullCells } = pickEntityCells());
@@ -1116,6 +1127,10 @@ import { musicPlayer } from "./music-player.js?v=1";
     keys.interactPressed = false;
     keys.restartPressed = false;
     if (player3d) player3d.setVisible(false);
+    if (proxMapWrapEl) {
+      proxMapWrapEl.classList.add("is-hidden");
+      proxMapWrapEl.setAttribute("aria-hidden", "true");
+    }
     syncMenuVideos(true);
     stopAmbient();
     musicPlayer.resumePlaylist();
@@ -1130,6 +1145,10 @@ import { musicPlayer } from "./music-player.js?v=1";
     if (mainMenuEl) mainMenuEl.classList.add("hidden");
     syncMenuVideos(false);
     if (gameUiEl) gameUiEl.classList.remove("hidden");
+    if (proxMapWrapEl) {
+      proxMapWrapEl.classList.remove("is-hidden");
+      proxMapWrapEl.setAttribute("aria-hidden", "false");
+    }
     keys.interactPressed = false;
     keys.restartPressed = false;
     bobPhase = 0;
@@ -1980,6 +1999,15 @@ import { musicPlayer } from "./music-player.js?v=1";
       drawHeldFlame(flameSig);
       drawVignetteAndFlameLight();
       drawCrosshair();
+      if (proximityMap && state.status === "playing") {
+        proximityMap.draw({
+          player: state.player,
+          lanterns: state.lanterns,
+          shadows: state.shadows,
+          exit: state.exit,
+          viewDist: getViewDistance(),
+        });
+      }
       return;
     }
 
@@ -1990,6 +2018,15 @@ import { musicPlayer } from "./music-player.js?v=1";
     drawVignetteAndFlameLight();
     drawHeldFlame(flameSig);
     drawCrosshair();
+    if (proximityMap && state.status === "playing") {
+      proximityMap.draw({
+        player: state.player,
+        lanterns: state.lanterns,
+        shadows: state.shadows,
+        exit: state.exit,
+        viewDist: getViewDistance(),
+      });
+    }
   }
 
   // ============================================

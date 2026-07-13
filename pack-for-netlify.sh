@@ -23,7 +23,7 @@ mkdir -p \
 
 echo "Packing core files..."
 cp "$ROOT/index.html" "$ROOT/leaderboard.html" "$ROOT/lore.html" "$ROOT/sign-in.html" "$ROOT/profile.html" "$ROOT/style.css" "$DEST/"
-cp "$ROOT/game.js" "$ROOT/world3d.js" "$ROOT/player3d.js" "$ROOT/enemysprite.js" "$ROOT/site-nav.js" "$ROOT/ui-sfx.js" "$ROOT/auth.js" "$ROOT/music-player.js" "$DEST/"
+cp "$ROOT/game.js" "$ROOT/world3d.js" "$ROOT/player3d.js" "$ROOT/enemysprite.js" "$ROOT/site-nav.js" "$ROOT/ui-sfx.js" "$ROOT/auth.js" "$ROOT/music-player.js" "$ROOT/proximity-map.js" "$DEST/"
 
 echo "Packing 3D models..."
 cp "$ROOT/assets/player/banker_torch_animated_18.glb" "$DEST/assets/player/"
