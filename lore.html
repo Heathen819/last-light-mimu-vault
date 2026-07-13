@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lore — Last Light: Mimu Vault</title>
-  <link rel="stylesheet" href="style.css?v=profile_1" />
+  <link rel="stylesheet" href="style.css?v=music_3" />
 </head>
 <body>
   <div class="site-page-shell">
@@ -36,10 +36,10 @@
         aria-hidden="true"
       >
         <div class="menu-dropdown-links">
+          <div id="nav-account-slot" class="menu-account-slot"></div>
           <a href="index.html" class="menu-dropdown-item">Home</a>
           <a href="leaderboard.html" class="menu-dropdown-item">Leaderboard</a>
           <span class="menu-dropdown-item is-current" aria-current="page">Lore</span>
-          <a href="sign-in.html" class="menu-dropdown-item" id="nav-auth-link">Sign In</a>
           <button type="button" id="nav-sign-out-btn" class="menu-dropdown-item" hidden>
             Sign Out
           </button>
@@ -122,8 +122,20 @@
     </main>
   </div>
 
+  <div class="volume-panel volume-panel--corner volume-panel--fixed" aria-label="Music volume">
+    <div class="volume-row">
+      <button id="music-rewind-btn" type="button" class="volume-transport" aria-label="Rewind music 10 seconds" title="Rewind 10s"><span aria-hidden="true">⏪</span></button>
+      <button id="volume-mute-btn" type="button" class="volume-mute" aria-label="Toggle music mute" title="Mute / Unmute"><span class="icon-on" aria-hidden="true">♪</span><span class="icon-off" aria-hidden="true">✕</span></button>
+      <input id="volume-slider" type="range" min="0" max="100" step="1" value="70" aria-label="Music volume" />
+      <span id="volume-label">70%</span>
+      <button id="music-forward-btn" type="button" class="volume-transport" aria-label="Fast forward music 10 seconds" title="Fast forward 10s"><span aria-hidden="true">⏩</span></button>
+    </div>
+  </div>
+
   <script type="module">
-    import { initMenuDrawer } from "./site-nav.js?v=auth_6";
+    import { initMenuDrawer } from "./site-nav.js?v=auth_9";
+    import { musicPlayer } from "./music-player.js?v=1";
+    musicPlayer.init();
     initMenuDrawer();
   </script>
 

@@ -14,6 +14,7 @@ mkdir -p \
   "$DEST/assets/objects/lanterns" \
   "$DEST/assets/environment/cave-walls" \
   "$DEST/assets/ui" \
+  "$DEST/assets/avatars" \
   "$DEST/assets/fonts" \
   "$DEST/assets/audio" \
   "$DEST/assets/audio/music" \
@@ -22,7 +23,7 @@ mkdir -p \
 
 echo "Packing core files..."
 cp "$ROOT/index.html" "$ROOT/leaderboard.html" "$ROOT/lore.html" "$ROOT/sign-in.html" "$ROOT/profile.html" "$ROOT/style.css" "$DEST/"
-cp "$ROOT/game.js" "$ROOT/world3d.js" "$ROOT/player3d.js" "$ROOT/enemysprite.js" "$ROOT/site-nav.js" "$ROOT/ui-sfx.js" "$ROOT/auth.js" "$DEST/"
+cp "$ROOT/game.js" "$ROOT/world3d.js" "$ROOT/player3d.js" "$ROOT/enemysprite.js" "$ROOT/site-nav.js" "$ROOT/ui-sfx.js" "$ROOT/auth.js" "$ROOT/music-player.js" "$DEST/"
 
 echo "Packing 3D models..."
 cp "$ROOT/assets/player/banker_torch_animated_18.glb" "$DEST/assets/player/"
@@ -42,6 +43,7 @@ cp "$ROOT/assets/ui/menu-logo-loop.mp4" "$DEST/assets/ui/"
 cp "$ROOT/assets/ui/menu-corner-loop.mp4" "$DEST/assets/ui/"
 cp "$ROOT/assets/ui/enter-vault-btn.png" "$DEST/assets/ui/"
 cp "$ROOT/assets/ui/vault-menu-bg.png" "$DEST/assets/ui/"
+cp "$ROOT/assets/avatars/"*.png "$DEST/assets/avatars/"
 cp "$ROOT/assets/fonts/BreatheFireIii-PKLOB.ttf" "$DEST/assets/fonts/"
 cp "$ROOT/assets/fonts/AlienAlphabet-nRRqJ.otf" "$DEST/assets/fonts/"
 cp "$ROOT/assets/audio/theme.mp3" "$DEST/assets/audio/"

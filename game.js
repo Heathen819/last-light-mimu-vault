@@ -5,8 +5,9 @@
    ============================================ */
 
 import { createEnemySprite } from "./enemysprite.js?v=null2";
-import { initMenuDrawer, recordLeaderboardRun } from "./site-nav.js?v=auth_6";
+import { initMenuDrawer, recordLeaderboardRun } from "./site-nav.js?v=auth_9";
 import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
+import { musicPlayer } from "./music-player.js?v=1";
 
 (() => {
   "use strict";
@@ -186,29 +187,14 @@ import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
   const gameUiEl = document.getElementById("game-ui");
   const playBtn = document.getElementById("play-btn");
   const menuBtn = document.getElementById("menu-btn");
-  const volumeSlider = document.getElementById("volume-slider");
-  const volumeLabel = document.getElementById("volume-label");
-  const volumeMuteBtn = document.getElementById("volume-mute-btn");
-  const musicRewindBtn = document.getElementById("music-rewind-btn");
-  const musicForwardBtn = document.getElementById("music-forward-btn");
 
   // Depth buffer: closest wall distance per screen column (for sprite occlusion)
   const zBuffer = new Float32Array(NUM_RAYS);
 
   // ============================================
-  // AUDIO — menu theme + in-game theme
+  // AUDIO — shared menu playlist (music-player.js) + in-game theme & ambience
   // ============================================
 
-  const VOLUME_STORAGE_KEY = "mimuVaultMusicVolume";
-  const MUTE_STORAGE_KEY = "mimuVaultMusicMuted";
-  const MENU_TRACKS = [
-    "assets/audio/deus-avarus-menu.mp3",
-    "assets/audio/music/Something Down Here (Dark Male Version).mp3",
-    "assets/audio/music/mixkit-ritual-synth-suspense-683.wav",
-    "assets/audio/music/They Will Destroy instrumental.mp3",
-    "assets/audio/music/Me-Moo Vault (1).mp3",
-    "assets/audio/music/Greed.mp3",
-  ];
   const GAME_TRACK = "assets/audio/theme.mp3";
   const LEVEL_AMBIENCE =
     "assets/audio/sfx/mixkit-creepy-cavern-ambience-loop-2492.wav";
@@ -216,18 +202,6 @@ import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
     "assets/audio/sfx/mixkit-heavy-sword-hit-2794.wav";
   const UI_SFX_VOLUME = 0.9;
   const AMBIENT_MIX = 0.52;
-  const MUSIC_SEEK_STEP = 10;
-
-  const music = {
-    el: new Audio(MENU_TRACKS[0]),
-    track: MENU_TRACKS[0],
-    volume: 0.7, // 0–1
-    muted: false,
-    unlocked: false,
-    wantPlaying: false,
-  };
-  music.el.loop = true;
-  music.el.preload = "auto";
 
   const ambient = {
     el: new Audio(LEVEL_AMBIENCE),
@@ -250,45 +224,18 @@ import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
     uiSfx.enterVault.play().catch(() => {});
   }
 
-  function loadVolumeSettings() {
-    const savedVol = localStorage.getItem(VOLUME_STORAGE_KEY);
-    const savedMute = localStorage.getItem(MUTE_STORAGE_KEY);
-    if (savedVol !== null) {
-      const n = Number(savedVol);
-      if (!Number.isNaN(n)) music.volume = Math.min(1, Math.max(0, n));
-    }
-    if (savedMute !== null) music.muted = savedMute === "1";
-  }
-
-  function getEffectiveVolume() {
-    return music.muted ? 0 : music.volume;
-  }
-
-  function getEffectiveAmbientVolume() {
-    return getEffectiveVolume() * AMBIENT_MIX;
-  }
-
-  function applyMusicVolume() {
-    if (music.el) {
-      music.el.volume = getEffectiveVolume();
-      music.el.muted = music.muted || music.volume <= 0;
-    }
-    applyAmbientVolume();
-    syncVolumeUI();
-  }
-
   function applyAmbientVolume() {
     if (!ambient.el) return;
-    const vol = getEffectiveAmbientVolume();
+    const vol = musicPlayer.getEffectiveVolume() * AMBIENT_MIX;
     ambient.el.volume = vol;
-    ambient.el.muted = music.muted || vol <= 0;
+    ambient.el.muted = musicPlayer.isMuted() || vol <= 0;
   }
 
   function startAmbient() {
     if (!ambient.el) return;
     ambient.wantPlaying = true;
     applyAmbientVolume();
-    if (music.muted || music.volume <= 0) {
+    if (musicPlayer.isMuted() || musicPlayer.getVolume() <= 0) {
       ambient.el.pause();
       return;
     }
@@ -305,166 +252,12 @@ import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
     ambient.el.currentTime = 0;
   }
 
-  function syncVolumeUI() {
-    const pct = Math.round(music.volume * 100);
-    if (volumeSlider) volumeSlider.value = String(pct);
-    if (volumeLabel) {
-      volumeLabel.textContent = music.muted || pct === 0 ? "Off" : `${pct}%`;
-    }
-    if (volumeMuteBtn) {
-      volumeMuteBtn.classList.toggle("is-muted", music.muted || pct === 0);
-      volumeMuteBtn.setAttribute(
-        "aria-label",
-        music.muted || pct === 0 ? "Unmute music" : "Mute music"
-      );
-    }
-  }
-
-  function pickMenuTrack() {
-    return MENU_TRACKS[Math.floor(Math.random() * MENU_TRACKS.length)];
-  }
-
-  function setMusicTrack(path) {
-    if (music.track === path) return;
-    const resume = music.wantPlaying;
-    music.track = path;
-    music.el.pause();
-    music.el.src = path;
-    music.el.load();
-    if (path === GAME_TRACK) {
-      if (resume) startAmbient();
-    } else {
-      stopAmbient();
-    }
-    if (resume) startMusic();
-  }
-
-  function stopMusic() {
-    music.wantPlaying = false;
-    if (!music.el) return;
-    music.el.pause();
-    music.el.currentTime = 0;
-    stopAmbient();
-  }
-
-  function startMusic() {
-    if (!music.el) return;
-    music.wantPlaying = true;
-    music.el.loop = true;
-    applyMusicVolume();
-    if (music.muted || music.volume <= 0) {
-      music.el.pause();
-      if (ambient.wantPlaying) ambient.el.pause();
-      return;
-    }
-    const play = music.el.play();
-    if (play && typeof play.then === "function") {
-      play.catch(() => {
-        // Browsers block autoplay until a user gesture — retry on next click
-      });
-    }
-    if (ambient.wantPlaying) startAmbient();
-  }
-
-  function setMusicVolume(pct) {
-    music.volume = Math.min(1, Math.max(0, pct / 100));
-    if (music.volume > 0) music.muted = false;
-    localStorage.setItem(VOLUME_STORAGE_KEY, String(music.volume));
-    localStorage.setItem(MUTE_STORAGE_KEY, music.muted ? "1" : "0");
-    applyMusicVolume();
-    if (music.wantPlaying) startMusic();
-    else stopMusic();
-  }
-
-  function toggleMusicMute() {
-    if (music.muted || music.volume <= 0) {
-      music.muted = false;
-      if (music.volume <= 0) music.volume = 0.7;
-    } else {
-      music.muted = true;
-    }
-    localStorage.setItem(VOLUME_STORAGE_KEY, String(music.volume));
-    localStorage.setItem(MUTE_STORAGE_KEY, music.muted ? "1" : "0");
-    applyMusicVolume();
-    if (music.muted || music.volume <= 0) {
-      if (music.el) music.el.pause();
-      if (ambient.el) ambient.el.pause();
-    } else if (music.wantPlaying) {
-      startMusic();
-    }
-  }
-
-  function seekMusic(seconds) {
-    if (!music.el) return;
-    music.unlocked = true;
-    if (!music.wantPlaying) music.wantPlaying = true;
-
-    const applySeek = () => {
-      const dur = music.el.duration;
-      let next = music.el.currentTime + seconds;
-      if (Number.isFinite(dur) && dur > 0) {
-        next = ((next % dur) + dur) % dur;
-      } else {
-        next = Math.max(0, next);
-      }
-      music.el.currentTime = next;
-      applyMusicVolume();
-      if (!music.muted && music.volume > 0) {
-        music.el.play().catch(() => {});
-      }
-    };
-
-    if (Number.isFinite(music.el.duration) && music.el.duration > 0) {
-      applySeek();
-      return;
-    }
-
-    music.el.addEventListener("loadedmetadata", applySeek, { once: true });
-    if (!music.el.src) return;
-    music.el.load();
-  }
-
-  loadVolumeSettings();
-  applyMusicVolume();
   initUiSfx();
-
-  if (volumeSlider) {
-    volumeSlider.addEventListener("input", () => {
-      setMusicVolume(Number(volumeSlider.value));
-    });
-  }
-
-  if (volumeMuteBtn) {
-    volumeMuteBtn.addEventListener("click", () => {
-      playButtonPushSfx(volumeMuteBtn);
-      toggleMusicMute();
-    });
-  }
-
-  if (musicRewindBtn) {
-    musicRewindBtn.addEventListener("click", () => {
-      playButtonPushSfx(musicRewindBtn);
-      seekMusic(-MUSIC_SEEK_STEP);
-    });
-  }
-
-  if (musicForwardBtn) {
-    musicForwardBtn.addEventListener("click", () => {
-      playButtonPushSfx(musicForwardBtn);
-      seekMusic(MUSIC_SEEK_STEP);
-    });
-  }
+  musicPlayer.init({ sfx: playButtonPushSfx });
+  // Keep cavern ambience volume/mute in sync with the music controls.
+  musicPlayer.onVolumeChange(applyAmbientVolume);
 
   initMenuDrawer();
-
-  function unlockMusicOnce() {
-    music.unlocked = true;
-    if (music.wantPlaying) startMusic();
-    window.removeEventListener("pointerdown", unlockMusicOnce);
-    window.removeEventListener("keydown", unlockMusicOnce);
-  }
-  window.addEventListener("pointerdown", unlockMusicOnce);
-  window.addEventListener("keydown", unlockMusicOnce);
 
   // ============================================
   // LEVEL DATA
@@ -1324,8 +1117,8 @@ import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
     keys.restartPressed = false;
     if (player3d) player3d.setVisible(false);
     syncMenuVideos(true);
-    setMusicTrack(pickMenuTrack());
-    startMusic();
+    stopAmbient();
+    musicPlayer.resumePlaylist();
   }
 
   function startGame() {
@@ -1354,8 +1147,7 @@ import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
       if (player3d) player3d.setVisible(true);
     });
     if (player3d) player3d.setVisible(true);
-    setMusicTrack(GAME_TRACK);
-    startMusic();
+    musicPlayer.playExclusive(GAME_TRACK, { loop: true });
     startAmbient();
   }
 

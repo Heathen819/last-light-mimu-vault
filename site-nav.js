@@ -110,20 +110,136 @@ export async function renderGlobalLeaderboard(container, statusEl) {
   }
 }
 
+/* ---------- Avatars (4 preset marks + custom upload) ---------- */
+
+export const AVATARS = [
+  { id: "basic", label: "Basic", img: "assets/avatars/basic.png?v=1" },
+  { id: "monster", label: "Monster", img: "assets/avatars/monster.png?v=1" },
+  { id: "silver", label: "Silver", img: "assets/avatars/silver.png?v=1" },
+  { id: "wood", label: "Wood", img: "assets/avatars/wood.png?v=1" },
+  { id: "gold", label: "Gold", img: "assets/avatars/gold.png?v=1" },
+];
+
+function avatarUserKey(session) {
+  return (session?.nameKey || session?.name || "").toLowerCase();
+}
+function avatarPrefKey(session) {
+  return `mimuVaultAvatar:${avatarUserKey(session)}`;
+}
+function avatarImgKey(session) {
+  return `mimuVaultAvatarImg:${avatarUserKey(session)}`;
+}
+
+/** Returns { type: "preset"|"custom", preset, imageUrl }. */
+export function getAvatarState(session) {
+  try {
+    const id = localStorage.getItem(avatarPrefKey(session));
+    if (id === "custom") {
+      const imageUrl = localStorage.getItem(avatarImgKey(session));
+      if (imageUrl) return { type: "custom", preset: AVATARS[0], imageUrl };
+    }
+    const preset = AVATARS.find((a) => a.id === id) || AVATARS[0];
+    return { type: "preset", preset, imageUrl: null };
+  } catch {
+    return { type: "preset", preset: AVATARS[0], imageUrl: null };
+  }
+}
+
+export function savePresetAvatar(session, id) {
+  try {
+    localStorage.setItem(avatarPrefKey(session), id);
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
+export function saveCustomAvatar(session, dataUrl) {
+  try {
+    localStorage.setItem(avatarImgKey(session), dataUrl);
+    localStorage.setItem(avatarPrefKey(session), "custom");
+  } catch {
+    /* ignore storage errors (quota) */
+  }
+}
+
+/** Paint an avatar (custom upload or preset character art) into an element. */
+export function applyAvatarTo(el, state) {
+  if (!el) return;
+  const url =
+    state?.type === "custom" && state.imageUrl
+      ? state.imageUrl
+      : (state?.preset || AVATARS[0]).img;
+  el.textContent = "";
+  el.style.background = "#0a0714";
+  el.style.backgroundImage = `url("${url}")`;
+  el.style.backgroundSize = "cover";
+  el.style.backgroundPosition = "center";
+  el.classList.add("has-image");
+}
+
+/**
+ * Glow-style account chip (pfp + name + best time) that links to the profile
+ * page. Renders a "Sign In" pill when signed out. No-ops when the slot is
+ * absent, so it is safe to call on every page.
+ */
+export async function renderAccountChip(slot) {
+  const chipEl =
+    typeof slot === "string" ? document.getElementById(slot) : slot;
+  if (!chipEl) return;
+
+  const session = getSession();
+  if (!session?.name) {
+    chipEl.innerHTML =
+      '<a class="account-chip account-chip--signin" href="sign-in.html">' +
+      '<span class="account-chip-pfp account-chip-pfp--add" aria-hidden="true">+</span>' +
+      '<span class="account-chip-text"><span class="account-chip-name">Sign In</span>' +
+      '<span class="account-chip-score">Create a profile</span></span></a>';
+    return;
+  }
+
+  chipEl.innerHTML =
+    '<a class="account-chip" href="profile.html" aria-label="View and edit your profile">' +
+    '<span class="account-chip-pfp" id="account-chip-pfp" aria-hidden="true"></span>' +
+    `<span class="account-chip-text"><span class="account-chip-name">${session.name}</span>` +
+    '<span class="account-chip-score" id="account-chip-score">Best —</span></span></a>';
+
+  applyAvatarTo(document.getElementById("account-chip-pfp"), getAvatarState(session));
+
+  try {
+    const entries = await fetchGlobalLeaderboard();
+    const key = avatarUserKey(session);
+    const entry = entries.find(
+      (e) => (e.nameKey || e.name || "").toLowerCase() === key
+    );
+    const scoreEl = document.getElementById("account-chip-score");
+    if (scoreEl) {
+      scoreEl.textContent = entry?.time ? `Best ${entry.time}` : "No time yet";
+    }
+  } catch {
+    /* leave "Best —" if the board is unavailable */
+  }
+}
+
 export function updateAuthNav() {
-  const link = document.getElementById("nav-auth-link");
+  const slot = document.getElementById("nav-account-slot");
   const signOutBtn = document.getElementById("nav-sign-out-btn");
   const session = getSession();
 
-  // Signed in: the account link becomes the player's name and opens their
-  // profile (Glow-style account chip). Signed out: it reads "Sign In".
-  if (link && link.tagName === "A") {
+  // Top of the drawer: signed in shows the player's pfp (+ name) linking to
+  // their profile; signed out shows a "Sign In" entry.
+  if (slot) {
     if (session?.name) {
-      link.textContent = session.name;
-      link.setAttribute("href", "profile.html");
+      slot.innerHTML =
+        '<a class="menu-account" href="profile.html" aria-label="View your profile">' +
+        '<span class="menu-account-pfp" id="nav-account-pfp" aria-hidden="true"></span>' +
+        `<span class="menu-account-name">${session.name}</span></a>`;
+      applyAvatarTo(
+        document.getElementById("nav-account-pfp"),
+        getAvatarState(session)
+      );
     } else {
-      link.textContent = "Sign In";
-      link.setAttribute("href", "sign-in.html");
+      slot.innerHTML =
+        '<a class="menu-dropdown-item" href="sign-in.html">Sign In</a>';
     }
   }
 
@@ -171,9 +287,11 @@ export function initMenuDrawer() {
       // you where you are — the menu updates in place to show "Sign In".
       signOut();
       updateAuthNav();
+      renderAccountChip("account-chip-slot");
       setOpen(false);
     });
   }
 
   updateAuthNav();
+  renderAccountChip("account-chip-slot");
 }

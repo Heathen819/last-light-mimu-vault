@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Profile — Last Light: Mimu Vault</title>
-  <link rel="stylesheet" href="style.css?v=profile_1" />
+  <link rel="stylesheet" href="style.css?v=music_3" />
 </head>
 <body>
   <div class="site-page-shell">
@@ -36,10 +36,10 @@
         aria-hidden="true"
       >
         <div class="menu-dropdown-links">
+          <div id="nav-account-slot" class="menu-account-slot"></div>
           <a href="index.html" class="menu-dropdown-item">Home</a>
           <a href="leaderboard.html" class="menu-dropdown-item">Leaderboard</a>
           <a href="lore.html" class="menu-dropdown-item">Lore</a>
-          <a href="sign-in.html" class="menu-dropdown-item" id="nav-auth-link">Sign In</a>
           <button type="button" id="nav-sign-out-btn" class="menu-dropdown-item" hidden>
             Sign Out
           </button>
@@ -91,8 +91,10 @@
           </div>
         </div>
 
-        <p class="profile-picker-label">Pick your mark</p>
+        <p class="profile-picker-label">Pick your mark or upload your own</p>
         <div class="avatar-picker" id="avatar-picker" role="group" aria-label="Choose an avatar"></div>
+        <input id="avatar-upload-input" type="file" accept="image/*" hidden />
+        <p class="avatar-upload-hint" id="avatar-upload-hint" hidden></p>
 
         <div class="auth-actions">
           <a href="index.html" class="auth-btn">Enter the Vault</a>
@@ -103,26 +105,33 @@
     </main>
   </div>
 
-  <script type="module">
-    import { initMenuDrawer, loadLeaderboard } from "./site-nav.js?v=auth_6";
-    import { getSession, signOut, fetchGlobalLeaderboard } from "./auth.js?v=5";
+  <div class="volume-panel volume-panel--corner volume-panel--fixed" aria-label="Music volume">
+    <div class="volume-row">
+      <button id="music-rewind-btn" type="button" class="volume-transport" aria-label="Rewind music 10 seconds" title="Rewind 10s"><span aria-hidden="true">⏪</span></button>
+      <button id="volume-mute-btn" type="button" class="volume-mute" aria-label="Toggle music mute" title="Mute / Unmute"><span class="icon-on" aria-hidden="true">♪</span><span class="icon-off" aria-hidden="true">✕</span></button>
+      <input id="volume-slider" type="range" min="0" max="100" step="1" value="70" aria-label="Music volume" />
+      <span id="volume-label">70%</span>
+      <button id="music-forward-btn" type="button" class="volume-transport" aria-label="Fast forward music 10 seconds" title="Fast forward 10s"><span aria-hidden="true">⏩</span></button>
+    </div>
+  </div>
 
+  <script type="module">
+    import {
+      initMenuDrawer,
+      loadLeaderboard,
+      AVATARS,
+      getAvatarState,
+      savePresetAvatar,
+      saveCustomAvatar,
+      applyAvatarTo,
+    } from "./site-nav.js?v=auth_9";
+    import { getSession, signOut, fetchGlobalLeaderboard } from "./auth.js?v=5";
+    import { musicPlayer } from "./music-player.js?v=1";
+
+    musicPlayer.init();
     initMenuDrawer();
 
-    const AVATARS = [
-      { id: "flame", glyph: "🔥", bg: "linear-gradient(145deg, #ff8a2b, #c4892a)" },
-      { id: "key", glyph: "🗝️", bg: "linear-gradient(145deg, #ffe8a3, #c4892a)" },
-      { id: "candle", glyph: "🕯️", bg: "linear-gradient(145deg, #ffc857, #7a3cc8)" },
-      { id: "skull", glyph: "💀", bg: "linear-gradient(145deg, #9af4ff, #1a8a9a)" },
-      { id: "crown", glyph: "👑", bg: "linear-gradient(145deg, #ffe8a3, #ffc857)" },
-      { id: "rune", glyph: "⚜️", bg: "linear-gradient(145deg, #3de8ff, #7a3cc8)" },
-      { id: "trophy", glyph: "🏆", bg: "linear-gradient(145deg, #ffc857, #c4892a)" },
-      { id: "bat", glyph: "🦇", bg: "linear-gradient(145deg, #7a3cc8, #120c22)" },
-      { id: "snake", glyph: "🐍", bg: "linear-gradient(145deg, #3de8ff, #1a8a9a)" },
-      { id: "gem", glyph: "💎", bg: "linear-gradient(145deg, #9af4ff, #3de8ff)" },
-      { id: "lock", glyph: "🔒", bg: "linear-gradient(145deg, #c4892a, #120c22)" },
-      { id: "moon", glyph: "🌙", bg: "linear-gradient(145deg, #ffe8a3, #7a3cc8)" },
-    ];
+    const AVATAR_MAX_PX = 160; // downscale uploads to keep localStorage small
 
     const session = getSession();
     const signedOut = document.getElementById("profile-signed-out");
@@ -137,59 +146,106 @@
       renderProfile(session);
     }
 
-    function avatarKey(s) {
-      return `mimuVaultAvatar:${(s.nameKey || s.name || "").toLowerCase()}`;
+    function applyAvatar(state) {
+      applyAvatarTo(document.getElementById("profile-avatar"), state);
     }
 
-    function getSavedAvatar(s) {
-      try {
-        const id = localStorage.getItem(avatarKey(s));
-        return AVATARS.find((a) => a.id === id) || AVATARS[0];
-      } catch {
-        return AVATARS[0];
-      }
+    function markSelected(picker, selectedEl) {
+      picker.querySelectorAll(".avatar-option").forEach((o) => {
+        const on = o === selectedEl;
+        o.classList.toggle("is-selected", on);
+        o.setAttribute("aria-pressed", on ? "true" : "false");
+      });
     }
 
-    function applyAvatar(avatar) {
-      const el = document.getElementById("profile-avatar");
-      el.textContent = avatar.glyph;
-      el.style.background = avatar.bg;
+    function readAndDownscale(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error("Could not read that file."));
+        reader.onload = () => {
+          const img = new Image();
+          img.onerror = () => reject(new Error("That image could not be loaded."));
+          img.onload = () => {
+            const scale = Math.min(1, AVATAR_MAX_PX / Math.max(img.width, img.height));
+            const w = Math.max(1, Math.round(img.width * scale));
+            const h = Math.max(1, Math.round(img.height * scale));
+            const canvas = document.createElement("canvas");
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL("image/jpeg", 0.85));
+          };
+          img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+      });
     }
 
-    function renderAvatarPicker(s, current) {
+    function renderAvatarPicker(s, state) {
       const picker = document.getElementById("avatar-picker");
+      const uploadInput = document.getElementById("avatar-upload-input");
+      const uploadHint = document.getElementById("avatar-upload-hint");
       picker.innerHTML = "";
+
       AVATARS.forEach((avatar) => {
+        const selected = state.type === "preset" && avatar.id === state.preset.id;
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.className = "avatar-option" + (avatar.id === current.id ? " is-selected" : "");
-        btn.textContent = avatar.glyph;
-        btn.style.background = avatar.bg;
-        btn.setAttribute("aria-label", avatar.id);
-        btn.setAttribute("aria-pressed", avatar.id === current.id ? "true" : "false");
+        btn.className = "avatar-option has-image" + (selected ? " is-selected" : "");
+        btn.style.backgroundImage = `url("${avatar.img}")`;
+        btn.setAttribute("aria-label", avatar.label || avatar.id);
+        btn.setAttribute("aria-pressed", selected ? "true" : "false");
         btn.addEventListener("click", () => {
-          try {
-            localStorage.setItem(avatarKey(s), avatar.id);
-          } catch {
-            /* ignore storage errors */
-          }
-          applyAvatar(avatar);
-          picker.querySelectorAll(".avatar-option").forEach((o) => {
-            const on = o === btn;
-            o.classList.toggle("is-selected", on);
-            o.setAttribute("aria-pressed", on ? "true" : "false");
-          });
+          savePresetAvatar(s, avatar.id);
+          applyAvatar({ type: "preset", preset: avatar, imageUrl: null });
+          markSelected(picker, btn);
         });
         picker.appendChild(btn);
       });
+
+      // Custom-upload tile.
+      const uploadBtn = document.createElement("button");
+      uploadBtn.type = "button";
+      uploadBtn.className =
+        "avatar-option avatar-option--upload" +
+        (state.type === "custom" ? " is-selected" : "");
+      uploadBtn.setAttribute("aria-label", "Upload your own picture");
+      uploadBtn.setAttribute("aria-pressed", state.type === "custom" ? "true" : "false");
+      if (state.type === "custom" && state.imageUrl) {
+        uploadBtn.style.backgroundImage = `url("${state.imageUrl}")`;
+        uploadBtn.classList.add("has-image");
+      } else {
+        uploadBtn.innerHTML = '<span class="avatar-upload-plus" aria-hidden="true">+</span>';
+      }
+      uploadBtn.addEventListener("click", () => uploadInput.click());
+      picker.appendChild(uploadBtn);
+
+      uploadInput.onchange = async () => {
+        const file = uploadInput.files?.[0];
+        uploadInput.value = "";
+        if (!file) return;
+        uploadHint.hidden = true;
+        try {
+          const dataUrl = await readAndDownscale(file);
+          saveCustomAvatar(s, dataUrl);
+          const next = { type: "custom", preset: AVATARS[0], imageUrl: dataUrl };
+          applyAvatar(next);
+          renderAvatarPicker(s, next);
+        } catch (err) {
+          uploadHint.textContent =
+            (err && err.message) || "Sorry, that picture could not be used.";
+          uploadHint.hidden = false;
+        }
+      };
     }
 
     async function renderProfile(s) {
       document.getElementById("profile-name").textContent = s.name;
 
-      const current = getSavedAvatar(s);
-      applyAvatar(current);
-      renderAvatarPicker(s, current);
+      const state = getAvatarState(s);
+      applyAvatar(state);
+      renderAvatarPicker(s, state);
 
       // Escapes recorded on this device.
       document.getElementById("stat-escapes").textContent = String(loadLeaderboard().length);

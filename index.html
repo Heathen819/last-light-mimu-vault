@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Last Light: Mimu Vault</title>
-  <link rel="stylesheet" href="style.css?v=profile_1" />
+  <link rel="stylesheet" href="style.css?v=music_3" />
 </head>
 <body>
   <div id="game-wrapper">
@@ -38,10 +38,10 @@
           aria-hidden="true"
         >
           <div class="menu-dropdown-links">
+            <div id="nav-account-slot" class="menu-account-slot"></div>
             <span class="menu-dropdown-item is-current" aria-current="page">Home</span>
             <a href="leaderboard.html" class="menu-dropdown-item">Leaderboard</a>
             <a href="lore.html" class="menu-dropdown-item">Lore</a>
-            <a href="sign-in.html" class="menu-dropdown-item" id="nav-auth-link">Sign In</a>
             <button type="button" id="nav-sign-out-btn" class="menu-dropdown-item" hidden>
               Sign Out
             </button>
@@ -56,6 +56,8 @@
           </div>
         </nav>
       </div>
+
+      <div id="account-chip-slot" class="account-chip-slot"></div>
 
       <div class="menu-inner">
         <video
@@ -220,7 +222,7 @@
       }
     }
   </script>
-  <script type="module" src="game.js?v=auth_10"></script>
+  <script type="module" src="game.js?v=auth_14"></script>
 
   <!-- ========== MIMU RUNE BORDER ========== -->
   <div class="mimu-rune-border" aria-hidden="true">
