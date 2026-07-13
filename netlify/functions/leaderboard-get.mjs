@@ -1,4 +1,4 @@
-import { getStore } from "@netlify/blobs";
+import { connectLambda, getStore } from "@netlify/blobs";
 import { jsonResponse, handleOptions } from "../lib/http.mjs";
 
 const MAX_GLOBAL = 50;
@@ -9,6 +9,9 @@ export async function handler(event) {
     return jsonResponse(405, { error: "Method not allowed." });
   }
 
+  // Classic (Lambda-compat) functions must initialize the Blobs context from
+  // the request event before getStore() can find the site credentials.
+  connectLambda(event);
   const store = getStore("mimu-vault-leaderboard");
   const entries = (await store.get("global", { type: "json" })) || [];
 

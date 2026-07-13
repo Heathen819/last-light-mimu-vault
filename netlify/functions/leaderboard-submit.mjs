@@ -1,4 +1,4 @@
-import { getStore } from "@netlify/blobs";
+import { connectLambda, getStore } from "@netlify/blobs";
 import { jsonResponse, handleOptions } from "../lib/http.mjs";
 import { verifyToken } from "../lib/jwt.mjs";
 
@@ -45,6 +45,7 @@ export async function handler(event) {
     return jsonResponse(400, { error: "Invalid run time." });
   }
 
+  connectLambda(event);
   const store = getStore("mimu-vault-leaderboard");
   const entries = (await store.get("global", { type: "json" })) || [];
   const now = new Date().toISOString();

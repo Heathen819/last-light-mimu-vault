@@ -1,4 +1,4 @@
-import { getStore } from "@netlify/blobs";
+import { connectLambda, getStore } from "@netlify/blobs";
 import { verifyPassword } from "../lib/crypto-auth.mjs";
 import { jsonResponse, handleOptions } from "../lib/http.mjs";
 import { signToken } from "../lib/jwt.mjs";
@@ -24,6 +24,7 @@ export async function handler(event) {
   const checked = validateCredentials(body.name, body.password);
   if (!checked.ok) return jsonResponse(400, { error: checked.error });
 
+  connectLambda(event);
   const store = getStore("mimu-vault-profiles");
   const profile = await store.get(`profile:${checked.nameKey}`, { type: "json" });
   if (!profile) {
