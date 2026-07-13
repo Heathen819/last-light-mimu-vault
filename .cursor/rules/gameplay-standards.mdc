@@ -1,0 +1,50 @@
+---
+description: Gameplay/engine coding standards for this JS + Three.js web game
+alwaysApply: true
+---
+
+# Gameplay Coding Standards (JS + Three.js)
+
+This project is a browser game in vanilla JS + Three.js (`game.js`, `world3d.js`,
+`player3d.js`, `ui-sfx.js`, `site-nav.js`). Apply these engine principles,
+translated to this stack.
+
+## Loop & lifecycle
+- One `requestAnimationFrame` loop. Use a fixed-timestep accumulator for
+  physics/AI; keep rendering frame-rate independent (scale by `dt`).
+- Do setup once at module/init time, never per frame.
+
+## Performance first (no expensive calls in the loop)
+- NEVER call `document.getElementById`/`querySelector`, `scene.getObjectByName`,
+  or `object.traverse` inside the update/render loop. Cache those references once
+  at init.
+```js
+// BAD: lookup every frame
+function update() { document.getElementById("hud").textContent = score; }
+// GOOD: cache once
+const hudEl = document.getElementById("hud");
+function update() { hudEl.textContent = score; }
+```
+
+## Composition over inheritance
+- Keep one module per system, exposing small single-purpose factories/functions.
+  Prefer wiring modules together over deep class hierarchies.
+
+## Event-driven input
+- Prefer `addEventListener` events over polling state every frame where the
+  interaction is discrete (clicks, key press/release, menu actions).
+
+## Memory management (pool, don't allocate in loops)
+- Reuse meshes, `Audio`, geometries, and materials; pool recurring objects
+  (SFX, enemies, projectiles). Call `dispose()` on teardown/rebuild.
+- Don't allocate `new THREE.Vector3()` (or arrays/objects) per frame — reuse
+  scratch instances declared at init.
+
+## Code quality
+- Group magic numbers into a named "tunable constants" block.
+- Use module-scoped `const`/`let` + closures for privacy (JS has no access
+  modifiers). Comment only non-obvious math/state, never narrate code.
+
+## Cache busting
+- When editing `game.js`, `world3d.js`, `player3d.js`, or `style.css`, bump the
+  matching `?v=...` query string in `index.html` (and any page that loads it).

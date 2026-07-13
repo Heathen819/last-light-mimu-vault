@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bloom position grid</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #0a0612;
+      color: #f5e6c8;
+      font-family: system-ui, sans-serif;
+      padding: 16px;
+    }
+    h1 { font-size: 1.1rem; margin: 0 0 8px; }
+    p { margin: 0 0 12px; color: #c9b8e8; font-size: 0.92rem; line-height: 1.45; }
+    canvas {
+      display: block;
+      max-width: 100%;
+      height: auto;
+      border: 1px solid rgba(255, 200, 87, 0.35);
+      cursor: crosshair;
+    }
+    #readout {
+      margin-top: 12px;
+      padding: 10px 14px;
+      background: rgba(20, 12, 36, 0.9);
+      border: 1px solid rgba(255, 200, 87, 0.25);
+      border-radius: 8px;
+      font-family: ui-monospace, monospace;
+      font-size: 0.88rem;
+    }
+    .actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+    button {
+      background: rgba(40, 24, 64, 0.95);
+      border: 1px solid rgba(255, 200, 87, 0.35);
+      color: #f5e6c8;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.88rem;
+    }
+    button:hover { border-color: rgba(255, 210, 80, 0.7); }
+  </style>
+</head>
+<body>
+  <h1>Bloom position grid</h1>
+  <p>
+    Grid: <strong>A1</strong> top-left → <strong>P9</strong> bottom-right (16×9, matches the vault viewport).
+    Click where the <strong>bloom center</strong> should sit on the embers.
+    Reply with the cell (e.g. <code>G4</code>) or the normalized coords.
+  </p>
+  <canvas id="c"></canvas>
+  <div id="readout">Click the ember center…</div>
+  <div class="actions">
+    <button type="button" id="dl">Download gridded PNG</button>
+    <button type="button" id="clear">Clear marker</button>
+    <button type="button" id="copy">Copy coords</button>
+  </div>
+
+  <script>
+    const IMG = "bloom-position-screenshot.png";
+    const COLS = 16;
+    const ROWS = 9;
+    const LETTERS = "ABCDEFGHIJKLMNOP";
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+    const readout = document.getElementById("readout");
+    const img = new Image();
+    let marker = null;
+    let lastCoords = null;
+
+    function cellAt(px, py) {
+      const c = Math.min(COLS - 1, Math.max(0, Math.floor(px / (canvas.width / COLS))));
+      const r = Math.min(ROWS - 1, Math.max(0, Math.floor(py / (canvas.height / ROWS))));
+      return `${LETTERS[c]}${r + 1}`;
+    }
+
+    function draw() {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const cw = canvas.width / COLS;
+      const ch = canvas.height / ROWS;
+
+      ctx.strokeStyle = "rgba(255,255,255,0.35)";
+      ctx.lineWidth = 1;
+      for (let c = 0; c <= COLS; c++) {
+        const x = c * cw;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let r = 0; r <= ROWS; r++) {
+        const y = r * ch;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = "rgba(255,210,80,0.75)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(canvas.width / 2, 0);
+      ctx.lineTo(canvas.width / 2, canvas.height);
+      ctx.moveTo(0, canvas.height / 2);
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+
+      ctx.font = "11px system-ui,sans-serif";
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const label = `${LETTERS[c]}${r + 1}`;
+          const x = c * cw + 4;
+          const y = r * ch + 14;
+          ctx.fillStyle = "rgba(0,0,0,0.55)";
+          ctx.fillRect(x - 2, y - 12, 34, 15);
+          ctx.fillStyle = "rgba(255,235,200,0.92)";
+          ctx.fillText(label, x, y);
+        }
+      }
+
+      if (marker) {
+        const { x, y } = marker;
+        ctx.strokeStyle = "#5cf";
+        ctx.fillStyle = "rgba(80,200,255,0.35)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, 14, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x - 22, y);
+        ctx.lineTo(x + 22, y);
+        ctx.moveTo(x, y - 22);
+        ctx.lineTo(x, y + 22);
+        ctx.stroke();
+      }
+    }
+
+    img.onload = () => {
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      draw();
+    };
+    img.src = IMG;
+
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+      const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+      const nx = (x / canvas.width).toFixed(3);
+      const ny = (y / canvas.height).toFixed(3);
+      const cell = cellAt(x, y);
+      marker = { x, y };
+      lastCoords = { cell, nx, ny, x: Math.round(x), y: Math.round(y) };
+      readout.innerHTML =
+        `Cell: <strong>${cell}</strong> &nbsp;|&nbsp; ` +
+        `Normalized: <strong>(${nx}, ${ny})</strong> &nbsp;|&nbsp; ` +
+        `Pixels: (${Math.round(x)}, ${Math.round(y)})`;
+      draw();
+    });
+
+    document.getElementById("clear").onclick = () => {
+      marker = null;
+      lastCoords = null;
+      readout.textContent = "Click the ember center…";
+      draw();
+    };
+
+    document.getElementById("dl").onclick = () => {
+      const a = document.createElement("a");
+      a.download = "bloom-position-grid.png";
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    };
+
+    document.getElementById("copy").onclick = async () => {
+      if (!lastCoords) return;
+      const text =
+        `${lastCoords.cell} (${lastCoords.nx}, ${lastCoords.ny}) ` +
+        `px ${lastCoords.x},${lastCoords.y}`;
+      try {
+        await navigator.clipboard.writeText(text);
+        readout.innerHTML += ' &nbsp;— <strong>copied</strong>';
+      } catch {
+        prompt("Copy:", text);
+      }
+    };
+  </script>
+</body>
+</html>

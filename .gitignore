@@ -1,0 +1,35 @@
+# Dependencies & build output (regenerable)
+node_modules/
+Mimu Vault Deploy/
+.netlify/
+
+# Archives
+*.zip
+
+# OS junk
+.DS_Store
+**/.DS_Store
+
+# Large source / experimental 3D files not needed to run or build the site
+# (GitHub blocks files >100MB; these are raw exports kept locally only)
+*.blend
+*.blend1
+*.fbx
+New-basic-banker-torch.glb
+New-basic-banker-torch_fire4.glb
+assets/New-basic-banker-torch_fire3.glb
+assets/player/basic_banker_pose_avatar.blend
+assets/player/banker1.0_andTorch2.glb
+basic banker 3d model 4k.glb
+basic+banker+3d+model+1k.glb
+basic_banker_rigged_5.glb
+banker_new_2_animated.glb
+shadow-ghost-5.glb
+shadow-ghost.fbx
+shadow-ghost2.fbx
+shadow-ghost3.bin
+shadow-ghost3.gltf
+Untitled.bin
+Untitled.gltf
+flame_animation.glb
+flame_animation2.glb

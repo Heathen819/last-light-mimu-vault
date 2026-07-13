@@ -1,0 +1,24 @@
+---
+description: Preserve locked screen-anchored bloom when editing avatar, torch, or player3d
+globs: player3d.js,game.js
+alwaysApply: false
+---
+
+# Bloom position lock
+
+Bloom placement is **intentionally frozen** and documented in `notes/BLOOM_TUNING.md`.
+
+## Do not change when updating avatar / torch / GLB
+
+- `BLOOM_TORCH_LOCK` in `player3d.js` (screen anchor K4, nudge 0/0)
+- Screen-space bloom placement (`placeBloomAtScreen`, `screenAnchorToWorld`)
+- Parenting bloom orbs to `scene` (not `flameAnchor` or torch nodes)
+
+## OK to change with avatar/torch work
+
+- `MODEL_URL`, skeletal animation, avatar framing, torch mesh materials
+- `FLAME_LOCAL_OFFSET`, `POINT_LIGHT_SCREEN`, flame shader — these affect flame/lights, not bloom anchor
+
+## If bloom must move
+
+Edit `BLOOM_TORCH_LOCK` only on purpose, update `notes/BLOOM_TUNING.md`, and bump `?v=banker_new_*` cache bust.

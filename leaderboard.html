@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leaderboard — Last Light: Mimu Vault</title>
+  <link rel="stylesheet" href="style.css?v=auth_1" />
+</head>
+<body>
+  <div class="site-page-shell">
+    <div class="site-page-bg" aria-hidden="true"></div>
+
+    <div class="menu-dropdown">
+      <button
+        id="site-menu-toggle"
+        type="button"
+        class="menu-dropdown-toggle"
+        aria-expanded="false"
+        aria-controls="site-menu-drawer"
+        aria-label="Open menu"
+      >
+        <img
+          class="menu-dropdown-glyph"
+          src="assets/ui/menu-glyph.png?v=3"
+          alt=""
+          width="94"
+          height="101"
+          decoding="async"
+        />
+        <span class="menu-dropdown-chevron" aria-hidden="true">▾</span>
+      </button>
+      <nav
+        id="site-menu-drawer"
+        class="menu-dropdown-panel"
+        aria-label="Site links"
+        aria-hidden="true"
+      >
+        <div class="menu-dropdown-links">
+          <a href="index.html" class="menu-dropdown-item">Home</a>
+          <span class="menu-dropdown-item is-current" aria-current="page">Leaderboard</span>
+          <a href="lore.html" class="menu-dropdown-item">Lore</a>
+          <a href="sign-in.html" class="menu-dropdown-item" id="nav-auth-link">Sign In</a>
+          <button type="button" id="nav-sign-out-btn" class="menu-dropdown-item" hidden>
+            Sign Out
+          </button>
+          <a
+            href="https://mimuonape.xyz"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="menu-dropdown-item"
+          >
+            Mimu Website
+          </a>
+        </div>
+      </nav>
+    </div>
+
+    <main class="site-page-card site-page-card--wide">
+      <a href="index.html" class="site-page-back">← Back to Vault</a>
+      <h1 class="site-page-title">Leaderboard</h1>
+      <p class="site-page-intro">Fastest vault escapes — global and on this device.</p>
+
+      <h2 class="lore-section-title">Global</h2>
+      <p id="global-leaderboard-status" class="leaderboard-status"></p>
+      <div id="global-leaderboard-list" class="site-page-body" aria-live="polite"></div>
+      <p class="leaderboard-cta">
+        <a href="sign-in.html">Create a profile</a> or sign in to post your best time.
+      </p>
+
+      <h2 class="lore-section-title">This Device</h2>
+      <div id="leaderboard-list" class="site-page-body" aria-live="polite"></div>
+    </main>
+  </div>
+
+  <script type="module">
+    import {
+      initMenuDrawer,
+      renderGlobalLeaderboard,
+      renderLeaderboard,
+    } from "./site-nav.js?v=auth_5";
+
+    initMenuDrawer();
+    renderLeaderboard(document.getElementById("leaderboard-list"));
+    renderGlobalLeaderboard(
+      document.getElementById("global-leaderboard-list"),
+      document.getElementById("global-leaderboard-status")
+    );
+  </script>
+
+  <div class="mimu-rune-border" aria-hidden="true">
+    <div class="mimu-rune-strip mimu-rune-strip--top">
+      <span class="mimu-rune-track">MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP</span>
+    </div>
+  </div>
+  </div>
+
+</body>
+</html>

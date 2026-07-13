@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign In — Last Light: Mimu Vault</title>
+  <link rel="stylesheet" href="style.css?v=auth_1" />
+</head>
+<body>
+  <div class="site-page-shell">
+    <div class="site-page-bg" aria-hidden="true"></div>
+
+    <div class="menu-dropdown">
+      <button
+        id="site-menu-toggle"
+        type="button"
+        class="menu-dropdown-toggle"
+        aria-expanded="false"
+        aria-controls="site-menu-drawer"
+        aria-label="Open menu"
+      >
+        <img
+          class="menu-dropdown-glyph"
+          src="assets/ui/menu-glyph.png?v=3"
+          alt=""
+          width="94"
+          height="101"
+          decoding="async"
+        />
+        <span class="menu-dropdown-chevron" aria-hidden="true">▾</span>
+      </button>
+      <nav
+        id="site-menu-drawer"
+        class="menu-dropdown-panel"
+        aria-label="Site links"
+        aria-hidden="true"
+      >
+        <div class="menu-dropdown-links">
+          <a href="index.html" class="menu-dropdown-item">Home</a>
+          <a href="leaderboard.html" class="menu-dropdown-item">Leaderboard</a>
+          <a href="lore.html" class="menu-dropdown-item">Lore</a>
+          <span class="menu-dropdown-item is-current" aria-current="page" id="nav-auth-link">Sign In</span>
+          <button type="button" id="nav-sign-out-btn" class="menu-dropdown-item" hidden>
+            Sign Out
+          </button>
+          <a
+            href="https://mimuonape.xyz"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="menu-dropdown-item"
+          >
+            Mimu Website
+          </a>
+        </div>
+      </nav>
+    </div>
+
+    <main class="site-page-card">
+      <a href="index.html" class="site-page-back">← Back to Vault</a>
+      <h1 class="site-page-title">Vault Profile</h1>
+      <p class="site-page-intro">You can play as a guest — sign in or create a profile to post your escape times on the global leaderboard.</p>
+
+      <div id="auth-signed-in" class="auth-signed-in" hidden>
+        <p class="auth-welcome">Signed in as <strong id="auth-user-name"></strong></p>
+        <p class="auth-hint">Beat the vault while signed in and your best time will appear on the global board.</p>
+        <div class="auth-actions">
+          <a href="index.html" class="auth-btn">Enter the Vault</a>
+          <a href="leaderboard.html" class="auth-btn auth-btn--secondary">View Leaderboard</a>
+          <button id="auth-sign-out-btn" type="button" class="auth-btn auth-btn--secondary">Sign Out</button>
+        </div>
+      </div>
+
+      <div id="auth-forms">
+        <div class="auth-tabs" role="tablist" aria-label="Sign in or create profile">
+          <button
+            id="auth-tab-signin"
+            type="button"
+            class="auth-tab is-active"
+            role="tab"
+            aria-selected="true"
+            aria-controls="auth-panel-signin"
+          >
+            Sign In
+          </button>
+          <button
+            id="auth-tab-create"
+            type="button"
+            class="auth-tab"
+            role="tab"
+            aria-selected="false"
+            aria-controls="auth-panel-create"
+          >
+            Create Profile
+          </button>
+        </div>
+
+        <p id="auth-message" class="auth-message" role="status" aria-live="polite" hidden></p>
+
+        <form id="auth-panel-signin" class="auth-form" aria-labelledby="auth-tab-signin">
+          <label class="auth-field">
+            <span class="auth-label">Name</span>
+            <input
+              class="auth-input"
+              type="text"
+              name="name"
+              autocomplete="username"
+              maxlength="20"
+              required
+            />
+          </label>
+          <label class="auth-field">
+            <span class="auth-label">Password</span>
+            <input
+              class="auth-input"
+              type="password"
+              name="password"
+              autocomplete="current-password"
+              minlength="6"
+              required
+            />
+          </label>
+          <button type="submit" class="auth-btn">Sign In</button>
+        </form>
+
+        <form id="auth-panel-create" class="auth-form" aria-labelledby="auth-tab-create" hidden>
+          <label class="auth-field">
+            <span class="auth-label">Name</span>
+            <input
+              class="auth-input"
+              type="text"
+              name="name"
+              autocomplete="username"
+              maxlength="20"
+              required
+            />
+          </label>
+          <label class="auth-field">
+            <span class="auth-label">Password</span>
+            <input
+              class="auth-input"
+              type="password"
+              name="password"
+              autocomplete="new-password"
+              minlength="6"
+              required
+            />
+          </label>
+          <label class="auth-field">
+            <span class="auth-label">Confirm Password</span>
+            <input
+              class="auth-input"
+              type="password"
+              name="confirm"
+              autocomplete="new-password"
+              minlength="6"
+              required
+            />
+          </label>
+          <button type="submit" class="auth-btn">Create Profile</button>
+        </form>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { initMenuDrawer } from "./site-nav.js?v=auth_5";
+    import {
+      getSession,
+      signIn,
+      signOut,
+      signUp,
+    } from "./auth.js?v=5";
+
+    initMenuDrawer();
+
+    const signedInPanel = document.getElementById("auth-signed-in");
+    const formsPanel = document.getElementById("auth-forms");
+    const userNameEl = document.getElementById("auth-user-name");
+    const signOutBtn = document.getElementById("auth-sign-out-btn");
+    const messageEl = document.getElementById("auth-message");
+    const tabSignIn = document.getElementById("auth-tab-signin");
+    const tabCreate = document.getElementById("auth-tab-create");
+    const panelSignIn = document.getElementById("auth-panel-signin");
+    const panelCreate = document.getElementById("auth-panel-create");
+
+    function showMessage(text, isError = false) {
+      if (!messageEl) return;
+      messageEl.hidden = !text;
+      messageEl.textContent = text || "";
+      messageEl.classList.toggle("auth-message--error", isError);
+      messageEl.classList.toggle("auth-message--success", !!text && !isError);
+    }
+
+    function setMode(mode) {
+      const isSignIn = mode === "signin";
+      tabSignIn.classList.toggle("is-active", isSignIn);
+      tabCreate.classList.toggle("is-active", !isSignIn);
+      tabSignIn.setAttribute("aria-selected", isSignIn ? "true" : "false");
+      tabCreate.setAttribute("aria-selected", isSignIn ? "false" : "true");
+      panelSignIn.hidden = !isSignIn;
+      panelCreate.hidden = isSignIn;
+      showMessage("");
+    }
+
+    function renderSignedInState() {
+      const session = getSession();
+      if (session?.name) {
+        signedInPanel.hidden = false;
+        formsPanel.hidden = true;
+        userNameEl.textContent = session.name;
+        return;
+      }
+      signedInPanel.hidden = true;
+      formsPanel.hidden = false;
+    }
+
+    function enterVault() {
+      window.location.assign("index.html");
+    }
+
+    tabSignIn.addEventListener("click", () => setMode("signin"));
+    tabCreate.addEventListener("click", () => setMode("create"));
+
+    panelSignIn.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      showMessage("");
+      const data = new FormData(panelSignIn);
+      try {
+        await signIn(data.get("name"), data.get("password"));
+        enterVault();
+      } catch (err) {
+        showMessage(err.message || "Could not sign in.", true);
+      }
+    });
+
+    panelCreate.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      showMessage("");
+      const data = new FormData(panelCreate);
+      const password = data.get("password");
+      const confirm = data.get("confirm");
+      if (password !== confirm) {
+        showMessage("Passwords do not match.", true);
+        return;
+      }
+      try {
+        await signUp(data.get("name"), password);
+        enterVault();
+      } catch (err) {
+        showMessage(err.message || "Could not create profile.", true);
+      }
+    });
+
+    signOutBtn.addEventListener("click", () => {
+      signOut();
+      renderSignedInState();
+      showMessage("Signed out.");
+    });
+
+    renderSignedInState();
+  </script>
+
+  <div class="mimu-rune-border" aria-hidden="true">
+    <div class="mimu-rune-strip mimu-rune-strip--top">
+      <span class="mimu-rune-track">MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP</span>
+    </div>
+  </div>
+  </div>
+
+</body>
+</html>

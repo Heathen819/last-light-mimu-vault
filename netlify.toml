@@ -1,0 +1,25 @@
+# Git deploy: install deps, pack static site, publish lean folder.
+# Functions live at netlify/functions (repo root) — required for global leaderboard.
+# Drag-and-drop of "Mimu Vault Deploy" alone will NOT run serverless auth/scores.
+
+[build]
+  command = "npm install && bash pack-for-netlify.sh"
+  publish = "Mimu Vault Deploy"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[functions]
+  node_bundler = "esbuild"
+  included_files = ["./netlify/lib/**"]
+
+[[headers]]
+  for = "/*.glb"
+  [headers.values]
+    Content-Type = "model/gltf-binary"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"

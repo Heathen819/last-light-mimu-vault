@@ -1,0 +1,43 @@
+---
+description: Unity/Unreal standards for a future native engine port of this game
+globs: **/*.cs,**/*.cpp,**/*.h,**/*.uasset
+alwaysApply: false
+---
+
+# Native Engine Port Standards (Unity / Unreal)
+
+Use these if/when this game is ported to a native engine. Auto-applies when
+C#/C++/Unreal source files are present.
+
+## Architecture
+- Respect engine lifecycle: init/caching in `Awake`/`Start` (Unity) or
+  `BeginPlay` (Unreal); per-frame work in `Update`, physics in `FixedUpdate`.
+- Unreal: keep logic decoupled between C++ and Blueprints; expose tunables.
+
+## Performance first
+- NEVER call `GameObject.Find`, `GetComponent`, or string/tag lookups inside
+  update loops. Cache all references in `Awake`/`Start`/`BeginPlay`.
+```csharp
+// BAD
+void Update() { GetComponent<Rigidbody>().AddForce(dir); }
+// GOOD
+Rigidbody _rb;
+void Awake() { _rb = GetComponent<Rigidbody>(); }
+void Update() { _rb.AddForce(dir); }
+```
+
+## Component-driven
+- Favor composition over inheritance. Scripts are modular, reusable,
+  single-purpose components.
+
+## Input & events
+- Use the modern Input System, and event-driven architecture (C# events,
+  UnityEvents, or Unreal delegates) instead of constant state polling.
+
+## Memory management
+- Avoid `Instantiate`/`Spawn` in runtime loops. Use object pooling for
+  projectiles, particles, and other recurring items.
+
+## Code quality
+- Proper access modifiers: `private [SerializeField]`, `public`, `protected`.
+- Comment complex math or state logic clearly and concisely.

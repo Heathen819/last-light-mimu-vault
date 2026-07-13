@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Last Light: Mimu Vault</title>
+  <link rel="stylesheet" href="style.css?v=selective_bloom_1" />
+</head>
+<body>
+  <div id="game-wrapper">
+    <!-- ========== MAIN MENU ========== -->
+    <div id="main-menu">
+      <div class="menu-bg" aria-hidden="true"></div>
+
+      <div class="menu-dropdown">
+        <button
+          id="site-menu-toggle"
+          type="button"
+          class="menu-dropdown-toggle"
+          aria-expanded="false"
+          aria-controls="site-menu-drawer"
+          aria-label="Open menu"
+        >
+          <img
+            class="menu-dropdown-glyph"
+            src="assets/ui/menu-glyph.png?v=3"
+            alt=""
+            width="94"
+            height="101"
+            decoding="async"
+          />
+          <span class="menu-dropdown-chevron" aria-hidden="true">▾</span>
+        </button>
+        <nav
+          id="site-menu-drawer"
+          class="menu-dropdown-panel"
+          aria-label="Site links"
+          aria-hidden="true"
+        >
+          <div class="menu-dropdown-links">
+            <span class="menu-dropdown-item is-current" aria-current="page">Home</span>
+            <a href="leaderboard.html" class="menu-dropdown-item">Leaderboard</a>
+            <a href="lore.html" class="menu-dropdown-item">Lore</a>
+            <a href="sign-in.html" class="menu-dropdown-item" id="nav-auth-link">Sign In</a>
+            <button type="button" id="nav-sign-out-btn" class="menu-dropdown-item" hidden>
+              Sign Out
+            </button>
+            <a
+              href="https://mimuonape.xyz"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="menu-dropdown-item"
+            >
+              Mimu Website
+            </a>
+          </div>
+        </nav>
+      </div>
+
+      <div class="menu-inner">
+        <video
+          id="menu-logo-video"
+          class="menu-logo"
+          src="assets/ui/menu-logo-loop.mp4?v=1"
+          poster="assets/ui/last-light-logo.png?v=main3"
+          autoplay
+          muted
+          loop
+          playsinline
+          disablepictureinpicture
+          aria-label="Mimu Vault Last Light"
+          width="1024"
+          height="1024"
+        ></video>
+        <p class="menu-tagline">Carry the Flame. Escape the Vault.</p>
+
+        <button id="play-btn" type="button" aria-label="Enter the Vault">
+          <img
+            class="play-btn-img"
+            src="assets/ui/enter-vault-btn.png?v=2"
+            alt=""
+            width="1024"
+            height="809"
+          />
+        </button>
+      </div>
+
+      <a
+        href="https://mimusniper.xyz"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="menu-corner-stack"
+        aria-label="Visit the Mimu Sniper Site"
+        title="Visit the Mimu Sniper Site"
+      >
+        <video
+          id="menu-corner-video"
+          class="menu-corner-video"
+          src="assets/ui/menu-corner-loop.mp4?v=1"
+          autoplay
+          muted
+          loop
+          playsinline
+          disablepictureinpicture
+          aria-hidden="true"
+        ></video>
+        <span class="menu-corner-caption">Visit the Mimu Sniper Site</span>
+      </a>
+
+      <div class="volume-panel volume-panel--corner" aria-label="Music volume">
+        <div class="volume-row">
+          <button
+            id="music-rewind-btn"
+            type="button"
+            class="volume-transport"
+            aria-label="Rewind music 10 seconds"
+            title="Rewind 10s"
+          >
+            <span aria-hidden="true">⏪</span>
+          </button>
+          <button
+            id="volume-mute-btn"
+            type="button"
+            class="volume-mute"
+            aria-label="Toggle music mute"
+            title="Mute / Unmute"
+          >
+            <span class="icon-on" aria-hidden="true">♪</span>
+            <span class="icon-off" aria-hidden="true">✕</span>
+          </button>
+          <input
+            id="volume-slider"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value="70"
+            aria-label="Music volume"
+          />
+          <span id="volume-label">70%</span>
+          <button
+            id="music-forward-btn"
+            type="button"
+            class="volume-transport"
+            aria-label="Fast forward music 10 seconds"
+            title="Fast forward 10s"
+          >
+            <span aria-hidden="true">⏩</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== IN-GAME HUD ========== -->
+    <div id="game-ui" class="hidden">
+      <header id="hud">
+        <div id="title-block">
+          <h1>Last Light</h1>
+          <p class="subtitle">Mimu Vault</p>
+        </div>
+
+        <div id="light-meter-wrap">
+          <span class="meter-label">Flame</span>
+          <div id="light-meter" aria-label="Light energy">
+            <div id="light-meter-fill"></div>
+          </div>
+          <span id="light-percent">100%</span>
+        </div>
+
+        <div id="lantern-status">
+          <span class="lantern-status-label">Lanterns</span>
+          <div class="lantern-status-row">
+            <span id="lantern-count">0 / 4</span>
+            <span id="lantern-remaining" class="lantern-remaining">4 to light</span>
+          </div>
+        </div>
+      </header>
+
+      <div id="viewport">
+        <canvas id="game" width="960" height="540"></canvas>
+        <canvas id="player3d" width="960" height="540" aria-hidden="true"></canvas>
+        <canvas id="flameBloom" width="960" height="540" aria-hidden="true"></canvas>
+        <div id="lantern-hud" aria-live="polite">
+          <span class="lantern-hud-label">Lanterns</span>
+          <span id="lantern-hud-count" class="lantern-hud-count">0 / 4</span>
+          <span class="lantern-hud-sep" aria-hidden="true">·</span>
+          <span id="lantern-hud-remaining" class="lantern-hud-remaining">4 to light</span>
+        </div>
+        <p id="world-prompt" class="hidden" aria-live="polite"></p>
+      </div>
+
+      <footer id="controls-hint">
+        <span>WASD — Move</span>
+        <span>← → / Q — Look</span>
+        <span>Click — Mouse look (up/down)</span>
+        <span>E — Interact</span>
+        <span>R — Restart</span>
+        <span>Esc — Menu</span>
+      </footer>
+    </div>
+
+    <!-- Win / Lose overlay -->
+    <div id="overlay" class="hidden">
+      <div id="overlay-card">
+        <h2 id="overlay-title">You Escaped</h2>
+        <p id="overlay-message">The last flame found the door.</p>
+        <div class="overlay-actions">
+          <button id="restart-btn" type="button">Play Again (R)</button>
+          <button id="menu-btn" type="button" class="btn-secondary">Main Menu</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+  <script type="module" src="game.js?v=auth_1"></script>
+
+  <!-- ========== MIMU RUNE BORDER ========== -->
+  <div class="mimu-rune-border" aria-hidden="true">
+    <div class="mimu-rune-strip mimu-rune-strip--top">
+      <span class="mimu-rune-track">MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP</span>
+    </div>
+  </div>
+  </div>
+
+</body>
+</html>
