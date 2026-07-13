@@ -26,10 +26,7 @@ export async function handler(event) {
 
   connectLambda(event);
   const store = getStore("mimu-vault-profiles");
-  const existing = await store.get(`profile:${checked.nameKey}`, {
-    type: "json",
-    consistency: "strong",
-  });
+  const existing = await store.get(`profile:${checked.nameKey}`, { type: "json" });
   if (existing) {
     return jsonResponse(409, { error: "That name is already taken." });
   }

@@ -26,10 +26,7 @@ export async function handler(event) {
 
   connectLambda(event);
   const store = getStore("mimu-vault-profiles");
-  const profile = await store.get(`profile:${checked.nameKey}`, {
-    type: "json",
-    consistency: "strong",
-  });
+  const profile = await store.get(`profile:${checked.nameKey}`, { type: "json" });
   if (!profile) {
     return jsonResponse(401, { error: "Name or password is incorrect." });
   }

@@ -13,8 +13,7 @@ export async function handler(event) {
   // the request event before getStore() can find the site credentials.
   connectLambda(event);
   const store = getStore("mimu-vault-leaderboard");
-  const entries =
-    (await store.get("global", { type: "json", consistency: "strong" })) || [];
+  const entries = (await store.get("global", { type: "json" })) || [];
 
   const sorted = entries
     .filter((entry) => typeof entry?.seconds === "number")
