@@ -7,8 +7,8 @@ import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
 const NULL_GLB_VARIANTS = [
-  "assets/enemies/null-black-gray-green-eyes3.glb",
-  "assets/enemies/null-black-purple.glb",
+  "assets/enemies/null-black-gray-green-eyes3.glb?v=null1",
+  "assets/enemies/null-black-purple.glb?v=null1",
 ];
 const NULL_FLOAT_BASE_Y = 0.34;
 const LANTERN_URL = "assets/objects/lanterns/rock-crystal-lantern.glb";
@@ -155,7 +155,12 @@ export function createWorld3D(canvas, options = {}) {
         console.log("[world3d] Null template ready", { variant: idx, url });
       },
       undefined,
-      (err) => console.warn("[world3d] Null GLB load failed", { variant: idx, url, err })
+      (err) =>
+        console.warn("[world3d] Null GLB load failed — using placeholder until retry", {
+          variant: idx,
+          url,
+          err,
+        })
     );
   });
 
@@ -333,7 +338,42 @@ export function createWorld3D(canvas, options = {}) {
     if (!template) return null;
     const mesh = template.clone(true);
     mesh.userData.enemyVariant = variant;
+    mesh.userData.isFallback = false;
     scene.add(mesh);
+    return mesh;
+  }
+
+  function disposeNullMesh(mesh) {
+    if (!mesh) return;
+    scene.remove(mesh);
+  }
+
+  function ensureNullMesh(i, shadow) {
+    const desiredVariant = variantForShadow(shadow, i);
+    const hasTemplate = !!enemyTemplates[desiredVariant];
+    let mesh = nullMeshes[i];
+
+    // Swap placeholder capsules for real GLBs as soon as templates finish loading.
+    if (mesh?.userData?.isFallback && hasTemplate) {
+      disposeNullMesh(mesh);
+      mesh = null;
+    } else if (
+      mesh &&
+      hasTemplate &&
+      !mesh.userData?.isFallback &&
+      mesh.userData?.enemyVariant !== desiredVariant
+    ) {
+      disposeNullMesh(mesh);
+      mesh = null;
+    }
+
+    if (!mesh && hasTemplate) {
+      mesh = spawnNullMesh(desiredVariant);
+    } else if (!mesh && !hasTemplate) {
+      mesh = createFallbackNull();
+    }
+
+    nullMeshes[i] = mesh || null;
     return mesh;
   }
 
@@ -450,27 +490,11 @@ export function createWorld3D(canvas, options = {}) {
     });
 
     while (nullMeshes.length < shadows.length) {
-      const variant = variantForShadow(shadows[nullMeshes.length], nullMeshes.length);
-      const m = spawnNullMesh(variant) || createFallbackNull();
-      nullMeshes.push(m);
+      nullMeshes.push(null);
     }
 
     shadows.forEach((shadow, i) => {
-      let mesh = nullMeshes[i];
-      const desiredVariant = variantForShadow(shadow, i);
-      const hasDesiredTemplate = !!enemyTemplates[desiredVariant];
-      const currentVariant = mesh?.userData?.enemyVariant;
-
-      if (mesh && hasDesiredTemplate && currentVariant !== desiredVariant) {
-        scene.remove(mesh);
-        mesh = spawnNullMesh(desiredVariant) || createFallbackNull();
-        nullMeshes[i] = mesh;
-      }
-
-      if (!mesh && hasDesiredTemplate) {
-        mesh = spawnNullMesh(desiredVariant) || createFallbackNull();
-        nullMeshes[i] = mesh;
-      }
+      const mesh = ensureNullMesh(i, shadow);
       if (!mesh) return;
       const bob = shadow.bob || 0;
       mesh.position.set(shadow.x, bob + NULL_FLOAT_BASE_Y, shadow.y);
@@ -544,6 +568,7 @@ export function createWorld3D(canvas, options = {}) {
     );
     body.position.y = 0.55;
     g.add(body);
+    g.userData.isFallback = true;
     scene.add(g);
     return g;
   }

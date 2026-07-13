@@ -4,7 +4,7 @@
    Canvas raycaster + optional Three.js player
    ============================================ */
 
-import { createEnemySprite } from "./enemysprite.js?v=null2";
+import { createEnemySprite } from "./enemysprite.js?v=null3";
 import { initMenuDrawer, recordLeaderboardRun } from "./site-nav.js?v=auth_9";
 import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
 import { musicPlayer } from "./music-player.js?v=1";
@@ -485,7 +485,7 @@ import { createProximityMap } from "./proximity-map.js?v=1";
 
   async function initWorld3D() {
     if (!USE_3D_WORLD) return;
-    const { createWorld3D } = await import("./world3d.js?v=torch_pool_2");
+    const { createWorld3D } = await import("./world3d.js?v=null_fix_1");
     world3d = createWorld3D(canvas, {
       levelMap: LEVEL_MAP,
       mapRows: MAP_ROWS,

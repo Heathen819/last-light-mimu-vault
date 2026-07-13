@@ -79,6 +79,12 @@ cat > "$DEST/netlify.toml" << 'EOF'
     Content-Type = "model/gltf-binary"
 
 [[headers]]
+  for = "/assets/enemies/*.glb"
+  [headers.values]
+    Content-Type = "model/gltf-binary"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
   for = "/*.js"
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"

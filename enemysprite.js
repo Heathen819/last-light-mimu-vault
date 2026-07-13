@@ -6,7 +6,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 
-const NULL_GLB = "assets/enemies/null-black-purple.glb";
+const NULL_GLB = "assets/enemies/null-black-purple.glb?v=null1";
 const ENEMY_URL = NULL_GLB;
 const SPRITE_SIZE = 384;
 
