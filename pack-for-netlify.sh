@@ -21,11 +21,11 @@ mkdir -p \
   "$DEST/assets/characters/villains"
 
 echo "Packing core files..."
-cp "$ROOT/index.html" "$ROOT/leaderboard.html" "$ROOT/lore.html" "$ROOT/sign-in.html" "$ROOT/style.css" "$DEST/"
+cp "$ROOT/index.html" "$ROOT/leaderboard.html" "$ROOT/lore.html" "$ROOT/sign-in.html" "$ROOT/profile.html" "$ROOT/style.css" "$DEST/"
 cp "$ROOT/game.js" "$ROOT/world3d.js" "$ROOT/player3d.js" "$ROOT/enemysprite.js" "$ROOT/site-nav.js" "$ROOT/ui-sfx.js" "$ROOT/auth.js" "$DEST/"
 
 echo "Packing 3D models..."
-cp "$ROOT/assets/player/basic_banker_pose_avatar_16-orange.glb" "$DEST/assets/player/"
+cp "$ROOT/assets/player/banker_torch_animated_18.glb" "$DEST/assets/player/"
 cp "$ROOT/assets/enemies/shadow-creature-new.glb" "$DEST/assets/enemies/"
 cp "$ROOT/assets/objects/lanterns/rock-crystal-lantern.glb" "$DEST/assets/objects/lanterns/"
 cp "$ROOT/torch_flame_animation_2.0.glb" "$DEST/" 2>/dev/null || true

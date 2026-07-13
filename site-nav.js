@@ -115,8 +115,16 @@ export function updateAuthNav() {
   const signOutBtn = document.getElementById("nav-sign-out-btn");
   const session = getSession();
 
+  // Signed in: the account link becomes the player's name and opens their
+  // profile (Glow-style account chip). Signed out: it reads "Sign In".
   if (link && link.tagName === "A") {
-    link.textContent = session?.name ? session.name : "Sign In";
+    if (session?.name) {
+      link.textContent = session.name;
+      link.setAttribute("href", "profile.html");
+    } else {
+      link.textContent = "Sign In";
+      link.setAttribute("href", "sign-in.html");
+    }
   }
 
   if (signOutBtn) {

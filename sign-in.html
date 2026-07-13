@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Sign In — Last Light: Mimu Vault</title>
-  <link rel="stylesheet" href="style.css?v=auth_1" />
+  <link rel="stylesheet" href="style.css?v=profile_1" />
 </head>
 <body>
   <div class="site-page-shell">
@@ -65,6 +65,7 @@
         <p class="auth-hint">Beat the vault while signed in and your best time will appear on the global board.</p>
         <div class="auth-actions">
           <a href="index.html" class="auth-btn">Enter the Vault</a>
+          <a href="profile.html" class="auth-btn auth-btn--secondary">View Profile</a>
           <a href="leaderboard.html" class="auth-btn auth-btn--secondary">View Leaderboard</a>
           <button id="auth-sign-out-btn" type="button" class="auth-btn auth-btn--secondary">Sign Out</button>
         </div>
@@ -163,7 +164,7 @@
   </div>
 
   <script type="module">
-    import { initMenuDrawer } from "./site-nav.js?v=auth_5";
+    import { initMenuDrawer } from "./site-nav.js?v=auth_6";
     import {
       getSession,
       signIn,

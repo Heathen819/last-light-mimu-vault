@@ -38,7 +38,7 @@ const SELECTIVE_BLOOM_MIX_SHADER = {
     }`,
 };
 
-const MODEL_URL = "assets/player/basic_banker_pose_avatar_16-orange.glb";
+const MODEL_URL = "assets/player/banker_torch_animated_18.glb";
 /** Neutral cone-flame emissive (orange torch crystal). */
 const NEUTRAL_FLAME_EMISSIVE = { r: 1.0, g: 0.42, b: 0.08 };
 /** Avatar GLB includes torch mesh on the raised arm (R_Forearm / R_Hand rig). */
@@ -174,6 +174,8 @@ export function createPlayer3D(canvas) {
   flameLight.position.set(0.4, 1.25, 0.3);
   scene.add(flameLight);
 
+  // Blue reads much darker than red at equal intensity — boost blue-cue lights.
+  const BLUE_CUE_LIGHT_GAIN = 2.4;
   // Bright blue/red signal light — only at the torch flame on direction cues
   const signalLight = new THREE.PointLight(0x4488ff, 0, 7, 1.0);
   signalLight.position.set(0.4, 1.25, 0.3);
@@ -996,7 +998,10 @@ export function createPlayer3D(canvas) {
   }
 
   function updateFlameTipWorld() {
-    if (useBuiltinConeFlame && emberAnchorNode) {
+    // The ember/crystal node is parented into the rig, so its world position
+    // tracks the animated (raised-torch) pose and sits right on the flame tip.
+    // Bounding-box / bind-pose anchors drift off to the side on skinned models.
+    if (emberAnchorNode) {
       emberAnchorNode.getWorldPosition(_tipPos);
       return;
     }
@@ -1007,11 +1012,6 @@ export function createPlayer3D(canvas) {
         const def = FLAME_SHEET_BASE;
         _tipPos.y += def.planeH * (def.scale ?? 1) * 0.3;
       }
-      return;
-    }
-
-    if (useGlbFlame && emberAnchorNode) {
-      emberAnchorNode.getWorldPosition(_tipPos);
       return;
     }
 
@@ -1169,7 +1169,12 @@ export function createPlayer3D(canvas) {
         .multiplyScalar(pulse * swayPulse);
     }
 
-    if (!glbFlameMat?.uniforms) return;
+    if (!glbFlameMat?.uniforms) {
+      // This model's flame mesh has no flame texture/shader, so tint the
+      // standard material directly to carry blue/red direction cues.
+      tintFlameMeshMaterial(builtinFlameMesh, isBlue, isRed, light);
+      return;
+    }
 
     const mode = isBlue ? 1 : isRed ? 2 : 0;
     glbFlameMat.uniforms.time.value = flameAnimTime;
@@ -1180,6 +1185,34 @@ export function createPlayer3D(canvas) {
       0.55,
       1.45
     );
+  }
+
+  /** Cue tints for a plain (untextured) flame mesh. */
+  const FLAME_CUE_BLUE = { color: [0.28, 0.55, 1.0], emissive: [0.2, 0.5, 1.0], emissiveIntensity: 2.6 };
+  const FLAME_CUE_RED = { color: [1.0, 0.36, 0.16], emissive: [1.0, 0.28, 0.1], emissiveIntensity: 2.0 };
+
+  function tintFlameMeshMaterial(mesh, isBlue, isRed, light) {
+    if (!mesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) {
+      if (!m || !m.emissive) continue;
+      if (!m.userData.__baseColor && m.color) m.userData.__baseColor = m.color.clone();
+      if (!m.userData.__baseEmissive) m.userData.__baseEmissive = m.emissive.clone();
+      if (m.userData.__baseEmissiveIntensity == null) {
+        m.userData.__baseEmissiveIntensity = m.emissiveIntensity;
+      }
+      const cue = isBlue ? FLAME_CUE_BLUE : isRed ? FLAME_CUE_RED : null;
+      if (cue) {
+        m.emissive.setRGB(cue.emissive[0], cue.emissive[1], cue.emissive[2]);
+        m.emissiveIntensity = cue.emissiveIntensity * (0.7 + 0.3 * light);
+        if (m.color) m.color.setRGB(cue.color[0], cue.color[1], cue.color[2]);
+        m.toneMapped = false;
+      } else {
+        m.emissive.copy(m.userData.__baseEmissive);
+        m.emissiveIntensity = m.userData.__baseEmissiveIntensity;
+        if (m.color && m.userData.__baseColor) m.color.copy(m.userData.__baseColor);
+      }
+    }
   }
 
   function updateFlameSpriteAnim(dt, light, isCue, isBlue = false, isRed = false, flame = null, moving = false) {
@@ -1705,13 +1738,14 @@ export function createPlayer3D(canvas) {
       (0.82 + 0.18 * flamePower);
 
     if (isCue) {
+      const cueLightGain = isBlue ? BLUE_CUE_LIGHT_GAIN : 1;
       flameTint.setRGB(flame.r / 255, flame.g / 255, flame.b / 255);
       flameLight.color.copy(flameTint);
-      flameLight.intensity = (1.1 + 0.45 * light) * signalBoost;
-      flameLight.distance = 3.2;
+      flameLight.intensity = (1.9 + 0.6 * light) * signalBoost * cueLightGain;
+      flameLight.distance = 3.4;
 
       signalLight.color.copy(flameTint);
-      signalLight.intensity = (3.5 + 2.5 * light) * signalBoost;
+      signalLight.intensity = (3.5 + 2.5 * light) * signalBoost * cueLightGain;
       signalLight.distance = 5;
       signalLight.visible = true;
 
@@ -1723,8 +1757,8 @@ export function createPlayer3D(canvas) {
       signalLight.visible = false;
       signalLight.intensity = 0;
       flameLight.color.copy(warmTint);
-      flameLight.intensity = 1.2 + 0.5 * light;
-      flameLight.distance = 3.2;
+      flameLight.intensity = 2.0 + 0.65 * light;
+      flameLight.distance = 3.4;
 
       for (const m of glowMaterials) {
         m.visible = false;

@@ -5,7 +5,7 @@
    ============================================ */
 
 import { createEnemySprite } from "./enemysprite.js?v=null2";
-import { initMenuDrawer, recordLeaderboardRun } from "./site-nav.js?v=auth_5";
+import { initMenuDrawer, recordLeaderboardRun } from "./site-nav.js?v=auth_6";
 import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
 
 (() => {
@@ -35,7 +35,7 @@ import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
 
   // Light / flame
   const LIGHT_MAX = 100;
-  const LIGHT_DRAIN_PER_SEC = 2.0;
+  const LIGHT_DRAIN_PER_SEC = 1.0;
   const LIGHT_RECHARGE_PER_SEC = 16;
   const VIEW_DIST_MIN = 5.8;
   const VIEW_DIST_MAX = 8.8;
@@ -115,7 +115,7 @@ import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
 
   async function initPlayer3D() {
     if (!USE_3D_PLAYER || !player3dCanvas) return;
-    const { createPlayer3D } = await import("./player3d.js?v=torch_bright_1");
+    const { createPlayer3D } = await import("./player3d.js?v=banker18_10");
     player3d = createPlayer3D(player3dCanvas);
     window.__player3d = player3d;
     syncViewportSize();
@@ -681,7 +681,7 @@ import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
 
   async function initWorld3D() {
     if (!USE_3D_WORLD) return;
-    const { createWorld3D } = await import("./world3d.js?v=torch_pool_1");
+    const { createWorld3D } = await import("./world3d.js?v=torch_pool_2");
     world3d = createWorld3D(canvas, {
       levelMap: LEVEL_MAP,
       mapRows: MAP_ROWS,
@@ -1859,9 +1859,9 @@ import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
     let r, g, b;
     const tintT = Math.min(1, Math.abs(dot) * fade * 1.2);
     if (dot >= 0) {
-      r = Math.round(255 * (1 - tintT) + 8 * tintT);
-      g = Math.round(160 * (1 - tintT) + 28 * tintT);
-      b = Math.round(40  * (1 - tintT) + 168 * tintT);
+      r = Math.round(255 * (1 - tintT) + 30 * tintT);
+      g = Math.round(160 * (1 - tintT) + 90 * tintT);
+      b = Math.round(40  * (1 - tintT) + 255 * tintT);
     } else {
       r = 255;
       g = Math.round(160 * (1 - tintT) + 28 * tintT);

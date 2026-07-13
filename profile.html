@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Profile — Last Light: Mimu Vault</title>
+  <link rel="stylesheet" href="style.css?v=profile_1" />
+</head>
+<body>
+  <div class="site-page-shell">
+    <div class="site-page-bg" aria-hidden="true"></div>
+
+    <div class="menu-dropdown">
+      <button
+        id="site-menu-toggle"
+        type="button"
+        class="menu-dropdown-toggle"
+        aria-expanded="false"
+        aria-controls="site-menu-drawer"
+        aria-label="Open menu"
+      >
+        <img
+          class="menu-dropdown-glyph"
+          src="assets/ui/menu-glyph.png?v=3"
+          alt=""
+          width="94"
+          height="101"
+          decoding="async"
+        />
+        <span class="menu-dropdown-chevron" aria-hidden="true">▾</span>
+      </button>
+      <nav
+        id="site-menu-drawer"
+        class="menu-dropdown-panel"
+        aria-label="Site links"
+        aria-hidden="true"
+      >
+        <div class="menu-dropdown-links">
+          <a href="index.html" class="menu-dropdown-item">Home</a>
+          <a href="leaderboard.html" class="menu-dropdown-item">Leaderboard</a>
+          <a href="lore.html" class="menu-dropdown-item">Lore</a>
+          <a href="sign-in.html" class="menu-dropdown-item" id="nav-auth-link">Sign In</a>
+          <button type="button" id="nav-sign-out-btn" class="menu-dropdown-item" hidden>
+            Sign Out
+          </button>
+          <a
+            href="https://mimuonape.xyz"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="menu-dropdown-item"
+          >
+            Mimu Website
+          </a>
+        </div>
+      </nav>
+    </div>
+
+    <main class="site-page-card">
+      <a href="index.html" class="site-page-back">← Back to Vault</a>
+      <h1 class="site-page-title">Your Profile</h1>
+
+      <div id="profile-signed-out" hidden>
+        <p class="site-page-intro">Sign in or create a profile to track your avatar, best escape time, and global rank.</p>
+        <div class="auth-actions">
+          <a href="sign-in.html" class="auth-btn">Sign In / Create Profile</a>
+          <a href="leaderboard.html" class="auth-btn auth-btn--secondary">View Leaderboard</a>
+        </div>
+      </div>
+
+      <div id="profile-signed-in" hidden>
+        <div class="profile-head">
+          <div class="profile-avatar" id="profile-avatar">🔥</div>
+          <div class="profile-identity">
+            <p class="profile-name" id="profile-name">Runner</p>
+            <p class="profile-rank-line" id="profile-rank-line">Loading rank…</p>
+          </div>
+        </div>
+
+        <div class="profile-stats">
+          <div class="profile-stat">
+            <span class="profile-stat-value" id="stat-best-time">—</span>
+            <span class="profile-stat-label">Best Time</span>
+          </div>
+          <div class="profile-stat">
+            <span class="profile-stat-value" id="stat-rank">—</span>
+            <span class="profile-stat-label">Global Rank</span>
+          </div>
+          <div class="profile-stat">
+            <span class="profile-stat-value" id="stat-escapes">0</span>
+            <span class="profile-stat-label">Escapes</span>
+          </div>
+        </div>
+
+        <p class="profile-picker-label">Pick your mark</p>
+        <div class="avatar-picker" id="avatar-picker" role="group" aria-label="Choose an avatar"></div>
+
+        <div class="auth-actions">
+          <a href="index.html" class="auth-btn">Enter the Vault</a>
+          <a href="leaderboard.html" class="auth-btn auth-btn--secondary">View Leaderboard</a>
+          <button id="profile-sign-out" type="button" class="auth-btn auth-btn--secondary">Sign Out</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module">
+    import { initMenuDrawer, loadLeaderboard } from "./site-nav.js?v=auth_6";
+    import { getSession, signOut, fetchGlobalLeaderboard } from "./auth.js?v=5";
+
+    initMenuDrawer();
+
+    const AVATARS = [
+      { id: "flame", glyph: "🔥", bg: "linear-gradient(145deg, #ff8a2b, #c4892a)" },
+      { id: "key", glyph: "🗝️", bg: "linear-gradient(145deg, #ffe8a3, #c4892a)" },
+      { id: "candle", glyph: "🕯️", bg: "linear-gradient(145deg, #ffc857, #7a3cc8)" },
+      { id: "skull", glyph: "💀", bg: "linear-gradient(145deg, #9af4ff, #1a8a9a)" },
+      { id: "crown", glyph: "👑", bg: "linear-gradient(145deg, #ffe8a3, #ffc857)" },
+      { id: "rune", glyph: "⚜️", bg: "linear-gradient(145deg, #3de8ff, #7a3cc8)" },
+      { id: "trophy", glyph: "🏆", bg: "linear-gradient(145deg, #ffc857, #c4892a)" },
+      { id: "bat", glyph: "🦇", bg: "linear-gradient(145deg, #7a3cc8, #120c22)" },
+      { id: "snake", glyph: "🐍", bg: "linear-gradient(145deg, #3de8ff, #1a8a9a)" },
+      { id: "gem", glyph: "💎", bg: "linear-gradient(145deg, #9af4ff, #3de8ff)" },
+      { id: "lock", glyph: "🔒", bg: "linear-gradient(145deg, #c4892a, #120c22)" },
+      { id: "moon", glyph: "🌙", bg: "linear-gradient(145deg, #ffe8a3, #7a3cc8)" },
+    ];
+
+    const session = getSession();
+    const signedOut = document.getElementById("profile-signed-out");
+    const signedIn = document.getElementById("profile-signed-in");
+
+    if (!session?.name) {
+      signedOut.hidden = false;
+      signedIn.hidden = true;
+    } else {
+      signedIn.hidden = false;
+      signedOut.hidden = true;
+      renderProfile(session);
+    }
+
+    function avatarKey(s) {
+      return `mimuVaultAvatar:${(s.nameKey || s.name || "").toLowerCase()}`;
+    }
+
+    function getSavedAvatar(s) {
+      try {
+        const id = localStorage.getItem(avatarKey(s));
+        return AVATARS.find((a) => a.id === id) || AVATARS[0];
+      } catch {
+        return AVATARS[0];
+      }
+    }
+
+    function applyAvatar(avatar) {
+      const el = document.getElementById("profile-avatar");
+      el.textContent = avatar.glyph;
+      el.style.background = avatar.bg;
+    }
+
+    function renderAvatarPicker(s, current) {
+      const picker = document.getElementById("avatar-picker");
+      picker.innerHTML = "";
+      AVATARS.forEach((avatar) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "avatar-option" + (avatar.id === current.id ? " is-selected" : "");
+        btn.textContent = avatar.glyph;
+        btn.style.background = avatar.bg;
+        btn.setAttribute("aria-label", avatar.id);
+        btn.setAttribute("aria-pressed", avatar.id === current.id ? "true" : "false");
+        btn.addEventListener("click", () => {
+          try {
+            localStorage.setItem(avatarKey(s), avatar.id);
+          } catch {
+            /* ignore storage errors */
+          }
+          applyAvatar(avatar);
+          picker.querySelectorAll(".avatar-option").forEach((o) => {
+            const on = o === btn;
+            o.classList.toggle("is-selected", on);
+            o.setAttribute("aria-pressed", on ? "true" : "false");
+          });
+        });
+        picker.appendChild(btn);
+      });
+    }
+
+    async function renderProfile(s) {
+      document.getElementById("profile-name").textContent = s.name;
+
+      const current = getSavedAvatar(s);
+      applyAvatar(current);
+      renderAvatarPicker(s, current);
+
+      // Escapes recorded on this device.
+      document.getElementById("stat-escapes").textContent = String(loadLeaderboard().length);
+
+      const rankLine = document.getElementById("profile-rank-line");
+      const bestEl = document.getElementById("stat-best-time");
+      const rankEl = document.getElementById("stat-rank");
+
+      try {
+        const entries = await fetchGlobalLeaderboard();
+        const key = (s.nameKey || s.name || "").toLowerCase();
+        const idx = entries.findIndex(
+          (e) => (e.nameKey || e.name || "").toLowerCase() === key
+        );
+        if (idx >= 0) {
+          const entry = entries[idx];
+          bestEl.textContent = entry.time || "—";
+          rankEl.textContent = `#${idx + 1}`;
+          rankLine.textContent = `Rank #${idx + 1} of ${entries.length} runner${entries.length === 1 ? "" : "s"}`;
+        } else {
+          bestEl.textContent = "—";
+          rankEl.textContent = "—";
+          rankLine.textContent = "Unranked — beat the vault to claim a spot.";
+        }
+      } catch {
+        rankLine.textContent = "Global rank unavailable right now.";
+      }
+    }
+
+    document.getElementById("profile-sign-out").addEventListener("click", () => {
+      signOut();
+      window.location.assign("sign-in.html");
+    });
+  </script>
+
+  <div class="mimu-rune-border" aria-hidden="true">
+    <div class="mimu-rune-strip mimu-rune-strip--top">
+      <span class="mimu-rune-track">MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP   MIMU VAULT LAST LIGHT   MIMU ON TOP</span>
+    </div>
+  </div>
+  </div>
+
+</body>
+</html>

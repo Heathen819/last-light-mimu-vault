@@ -33,3 +33,9 @@ Untitled.bin
 Untitled.gltf
 flame_animation.glb
 flame_animation2.glb
+
+# Unused experimental avatar exports (not referenced by the game)
+assets/banker_metallic_flame_4.glb
+assets/player/banker avatar metallic.glb
+assets/player/banker_new_3_animated_12.2.glb
+assets/player/banker_new_4_animated12.3.glb

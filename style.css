@@ -647,6 +647,117 @@ button.menu-dropdown-item {
   justify-content: center;
 }
 
+/* ---------- profile (lite) ---------- */
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  text-align: left;
+  margin: 4px 0 18px;
+}
+
+.profile-avatar {
+  flex-shrink: 0;
+  width: 76px;
+  height: 76px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  font-size: 2.1rem;
+  border: 1.5px solid rgba(255, 200, 87, 0.4);
+  box-shadow: 0 0 18px rgba(255, 180, 40, 0.18), inset 0 0 22px rgba(0, 0, 0, 0.4);
+}
+
+.profile-identity {
+  min-width: 0;
+}
+
+.profile-name {
+  margin: 0;
+  font-family: var(--font-ui);
+  font-size: 1.5rem;
+  color: var(--gold-bright);
+  word-break: break-word;
+}
+
+.profile-rank-line {
+  margin: 2px 0 0;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--cyan-soft);
+}
+
+.profile-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 20px;
+}
+
+.profile-stat {
+  flex: 1 1 120px;
+  padding: 12px 10px;
+  border-radius: 12px;
+  border: 1px solid rgba(61, 232, 255, 0.18);
+  background: rgba(61, 232, 255, 0.05);
+  text-align: center;
+}
+
+.profile-stat-value {
+  display: block;
+  font-family: var(--font-ui);
+  font-size: 1.4rem;
+  color: var(--gold-flame);
+}
+
+.profile-stat-label {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-ui);
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.profile-picker-label {
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cyan-soft);
+  margin: 0 0 10px;
+}
+
+.avatar-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 10px;
+  margin: 0 0 22px;
+}
+
+.avatar-option {
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 1.5rem;
+  cursor: pointer;
+  border: 1.5px solid rgba(61, 232, 255, 0.18);
+  background: rgba(8, 5, 16, 0.6);
+  transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+}
+
+.avatar-option:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 200, 87, 0.4);
+}
+
+.avatar-option.is-selected {
+  border-color: var(--gold-flame);
+  box-shadow: 0 0 14px rgba(255, 180, 40, 0.35);
+}
+
 .menu-bg {
   position: absolute;
   inset: -12px; /* bleed so blur doesn't show hard edges */

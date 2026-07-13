@@ -50,8 +50,8 @@ const ENV_CEIL_ROUGHNESS = 1.0;
 // Player torch light — bright pool tight around the player, short reach so it
 // doesn't spill far down corridors. High intensity + small distance = a strong
 // but quickly-falling-off glow centered on the player.
-const TORCH_BASE_INTENSITY = 2.2;
-const TORCH_LIGHT_INTENSITY = 4.2;
+const TORCH_BASE_INTENSITY = 3.6;
+const TORCH_LIGHT_INTENSITY = 7.0;
 const TORCH_BASE_DISTANCE = 3.4;
 const TORCH_LIGHT_DISTANCE = 3.0;
 
