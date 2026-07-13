@@ -47,7 +47,8 @@ export async function handler(event) {
 
   connectLambda(event);
   const store = getStore("mimu-vault-leaderboard");
-  const entries = (await store.get("global", { type: "json" })) || [];
+  const entries =
+    (await store.get("global", { type: "json", consistency: "strong" })) || [];
   const now = new Date().toISOString();
   const nextEntry = {
     name: session.name,
