@@ -27,7 +27,8 @@ cp "$ROOT/game.js" "$ROOT/world3d.js" "$ROOT/player3d.js" "$ROOT/enemysprite.js"
 
 echo "Packing 3D models..."
 cp "$ROOT/assets/player/banker_torch_animated_18.glb" "$DEST/assets/player/"
-cp "$ROOT/assets/enemies/shadow-creature-new.glb" "$DEST/assets/enemies/"
+cp "$ROOT/assets/enemies/null-black-gray-green-eyes3.glb" "$DEST/assets/enemies/"
+cp "$ROOT/assets/enemies/null-black-purple.glb" "$DEST/assets/enemies/"
 cp "$ROOT/assets/objects/lanterns/rock-crystal-lantern.glb" "$DEST/assets/objects/lanterns/"
 cp "$ROOT/torch_flame_animation_2.0.glb" "$DEST/" 2>/dev/null || true
 
