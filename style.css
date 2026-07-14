@@ -837,13 +837,27 @@ button.menu-dropdown-item {
 }
 
 /* ---------- account chip (main menu) ---------- */
+.menu-stack {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(420px, 100%);
+  margin-top: 86px;
+}
+
 .account-chip-slot {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 4;
-  max-width: calc(100% - 140px);
+  position: relative;
+  z-index: 2;
+  max-width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.account-chip-slot:empty {
+  display: none;
 }
 
 .account-chip {
@@ -947,6 +961,7 @@ button.menu-dropdown-item {
   text-align: center;
   gap: 10px;
   width: min(420px, 100%);
+  margin-top: 0;
   padding: 22px 22px 20px;
   border-radius: 18px;
   background: rgba(8, 5, 16, 0.72);
