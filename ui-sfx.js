@@ -77,7 +77,6 @@ function isUiClickable(target) {
       'input[type="submit"]',
       'input[type="reset"]',
       ".site-page-back",
-      ".menu-corner-stack",
     ].join(",")
   );
   if (!clickable) return null;

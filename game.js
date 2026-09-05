@@ -6,9 +6,13 @@
 
 import { createEnemySprite } from "./enemysprite.js?v=null3";
 import { initMenuDrawer, recordLeaderboardRun } from "./site-nav.js?v=auth_9";
-import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=3";
-import { musicPlayer } from "./music-player.js?v=1";
-import { createProximityMap } from "./proximity-map.js?v=1";
+import { initUiSfx, playButtonPushSfx } from "./ui-sfx.js?v=4";
+import { musicPlayer } from "./music-player.js?v=2";
+import { createProximityMap } from "./proximity-map.js?v=2";
+import {
+  createPlacementEditor,
+  shouldAutoOpenPlacementEditor,
+} from "./placement-editor.js?v=10";
 
 (() => {
   "use strict";
@@ -37,8 +41,9 @@ import { createProximityMap } from "./proximity-map.js?v=1";
 
   // Light / flame
   const LIGHT_MAX = 100;
-  const LIGHT_DRAIN_PER_SEC = 1.0;
   const LIGHT_RECHARGE_PER_SEC = 16;
+  const CARRY_FLAME_FACTOR = 0.65;
+  const CARRY_FLAME_MIN = 30;
   const VIEW_DIST_MIN = 5.8;
   const VIEW_DIST_MAX = 8.8;
 
@@ -64,13 +69,9 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   // Nulls (variant GLBs loaded by world3d.js)
   const NULL_GLB = "assets/enemies/null-black-purple.glb";
   const SHADOW_RADIUS = 0.35;
-  const SHADOW_WANDER_SPEED = 0.5;
-  const SHADOW_CHASE_SPEED = 1.0;
-  const SHADOW_AGGRO_RANGE = 2.9;
   const SHADOW_DEAGGRO_RANGE = 5.2;
   const SHADOW_CHASE_COOLDOWN = 2.4;
   const SHADOW_FLOAT_AMP = 0.14;
-  const SHADOW_DAMAGE_PER_SEC = 11;
   const SHADOW_TOUCH_RANGE = 0.42;
   /** Nulls refuse to enter this radius around a lit lantern. */
   const NULL_LANTERN_AVOID_RANGE = 2.75;
@@ -114,10 +115,11 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   let player3d = null;
   let world3d = null;
   let avatarCtx = null;
+  let placementEditor = null;
 
   async function initPlayer3D() {
     if (!USE_3D_PLAYER || !player3dCanvas) return;
-    const { createPlayer3D } = await import("./player3d.js?v=banker18_10");
+    const { createPlayer3D } = await import("./player3d.js?v=place_9");
     player3d = createPlayer3D(player3dCanvas);
     window.__player3d = player3d;
     syncViewportSize();
@@ -153,8 +155,12 @@ import { createProximityMap } from "./proximity-map.js?v=1";
 
   function syncViewportSize() {
     const rect = canvas.getBoundingClientRect();
-    const w = Math.max(2, Math.round(rect.width));
-    const h = Math.max(2, Math.round(rect.height));
+    let w = Math.round(rect.width);
+    let h = Math.round(rect.height);
+    // Hidden menu layout reports 0×0 — don't shrink the buffer to 2×2 or the
+    // CSS height:auto canvas locks into a tiny/square intrinsic ratio.
+    if (w < 4) return;
+    if (h < 4) h = Math.round(w * (CANVAS_H / CANVAS_W));
     if (world3d) world3d.resize(w, h);
     if (player3d) player3d.resize(w, h);
     if (flameBloomCanvas) {
@@ -180,16 +186,21 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   const overlayTitleEl = document.getElementById("overlay-title");
   const overlayMessageEl = document.getElementById("overlay-message");
   const restartBtn = document.getElementById("restart-btn");
+  const continueBtn = document.getElementById("continue-btn");
   const promptEl = document.getElementById("world-prompt");
   const proxMapWrapEl = document.getElementById("proximity-map-wrap");
   const proxMapCanvas = document.getElementById("proximity-map");
+  const levelIndicatorEl = document.getElementById("level-indicator");
+  const levelTimerEl = document.getElementById("level-timer");
+  const levelTransitionEl = document.getElementById("level-transition");
+  const levelTransitionTitleEl = document.getElementById("level-transition-title");
 
   const mainMenuEl = document.getElementById("main-menu");
   const menuLogoVideoEl = document.getElementById("menu-logo-video");
-  const menuCornerVideoEl = document.getElementById("menu-corner-video");
   const gameUiEl = document.getElementById("game-ui");
   const playBtn = document.getElementById("play-btn");
   const menuBtn = document.getElementById("menu-btn");
+  const runeBorderEl = document.querySelector(".mimu-rune-border");
 
   // Depth buffer: closest wall distance per screen column (for sprite occlusion)
   const zBuffer = new Float32Array(NUM_RAYS);
@@ -198,13 +209,22 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   // AUDIO — shared menu playlist (music-player.js) + in-game theme & ambience
   // ============================================
 
-  const GAME_TRACK = "assets/audio/theme.mp3";
+  const GAME_TRACK = "assets/audio/music/Vault of Echoes in-game.mp3";
   const LEVEL_AMBIENCE =
     "assets/audio/sfx/mixkit-creepy-cavern-ambience-loop-2492.wav";
   const ENTER_VAULT_SFX =
     "assets/audio/sfx/mixkit-heavy-sword-hit-2794.wav";
+  const LANTERN_LIGHT_SFX =
+    "assets/audio/mixkit-fire-swoosh-burning-1328.wav";
+  const NULL_BREATH_SFX =
+    "assets/audio/mixkit-single-zombie-breath-2233.wav";
   const UI_SFX_VOLUME = 0.9;
+  const LANTERN_SFX_VOLUME = 0.85;
   const AMBIENT_MIX = 0.52;
+  /** Null breath: full volume inside this distance, silent beyond hear range. */
+  const NULL_BREATH_FULL_RANGE = 0.85;
+  const NULL_BREATH_HEAR_RANGE = 5.0;
+  const NULL_BREATH_MIX = 0.7;
 
   const ambient = {
     el: new Audio(LEVEL_AMBIENCE),
@@ -213,11 +233,20 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   ambient.el.loop = true;
   ambient.el.preload = "auto";
 
-  // Enter Vault uses its own SFX; regular button clicks are handled in ui-sfx.js.
+  const nullBreath = {
+    el: new Audio(NULL_BREATH_SFX),
+  };
+  nullBreath.el.loop = true;
+  nullBreath.el.preload = "auto";
+  nullBreath.el.volume = 0;
+
+  // Enter Vault / lantern light use their own SFX; clicks are in ui-sfx.js.
   const uiSfx = {
     enterVault: new Audio(ENTER_VAULT_SFX),
+    lanternLight: new Audio(LANTERN_LIGHT_SFX),
   };
   uiSfx.enterVault.preload = "auto";
+  uiSfx.lanternLight.preload = "auto";
 
   function playEnterVaultSfx() {
     if (!uiSfx.enterVault) return;
@@ -225,6 +254,15 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     uiSfx.enterVault.muted = false;
     uiSfx.enterVault.volume = UI_SFX_VOLUME;
     uiSfx.enterVault.play().catch(() => {});
+  }
+
+  function playLanternLightSfx() {
+    if (!uiSfx.lanternLight || musicPlayer.isMuted()) return;
+    uiSfx.lanternLight.currentTime = 0;
+    uiSfx.lanternLight.muted = false;
+    uiSfx.lanternLight.volume =
+      musicPlayer.getEffectiveVolume() * LANTERN_SFX_VOLUME;
+    uiSfx.lanternLight.play().catch(() => {});
   }
 
   function applyAmbientVolume() {
@@ -255,6 +293,52 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     ambient.el.currentTime = 0;
   }
 
+  function stopNullBreath() {
+    if (!nullBreath.el) return;
+    nullBreath.el.pause();
+    nullBreath.el.currentTime = 0;
+    nullBreath.el.volume = 0;
+  }
+
+  /** Looping Null breath — louder the closer the nearest Null is. */
+  function updateNullBreathAudio() {
+    const el = nullBreath.el;
+    if (!el) return;
+
+    if (state.status !== "playing" || musicPlayer.isMuted()) {
+      if (!el.paused) el.pause();
+      el.volume = 0;
+      return;
+    }
+
+    let nearest = Infinity;
+    for (const shadow of state.shadows) {
+      const d = dist(state.player.x, state.player.y, shadow.x, shadow.y);
+      if (d < nearest) nearest = d;
+    }
+
+    if (!Number.isFinite(nearest) || nearest >= NULL_BREATH_HEAR_RANGE) {
+      if (!el.paused) el.pause();
+      el.volume = 0;
+      return;
+    }
+
+    const span = Math.max(0.001, NULL_BREATH_HEAR_RANGE - NULL_BREATH_FULL_RANGE);
+    const t = Math.max(
+      0,
+      Math.min(1, (NULL_BREATH_HEAR_RANGE - nearest) / span)
+    );
+    const vol = t * t * musicPlayer.getEffectiveVolume() * NULL_BREATH_MIX;
+    el.volume = vol;
+    el.muted = false;
+
+    if (vol > 0.01 && el.paused) {
+      el.play().catch(() => {});
+    } else if (vol <= 0.01 && !el.paused) {
+      el.pause();
+    }
+  }
+
   initUiSfx();
   musicPlayer.init({ sfx: playButtonPushSfx });
   // Keep cavern ambience volume/mute in sync with the music controls.
@@ -263,59 +347,223 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   initMenuDrawer();
 
   // ============================================
-  // LEVEL DATA
+  // LEVEL DATA — N-level vault floors
   // 0 = floor, 1 = wall
   // ============================================
 
-  //  Vault Level 1 — round maze with wide passages (col = x, row = y)
-  //  A recursive-backtracker maze masked to a disc: 2-tile-wide passages,
-  //  1-tile walls, many dead-ends so the lanterns are hard to find.
-  //  Player spawns bottom-center; Exit sits in a top-center alcove.
-  const MAZE_CELLS = 9; // maze cells per axis
-  const MAZE_PASSAGE = 2; // passage width in tiles
-  const MAZE_WALL = 1; // wall thickness in tiles
+  // Disc maze: 2-tile passages, 1-tile walls. Append LEVELS entries for new floors.
+  const MAZE_PASSAGE = 2;
+  const MAZE_WALL = 1;
   const MAZE_PERIOD = MAZE_PASSAGE + MAZE_WALL;
-  const MAZE_MASK_RADIUS = 13.5;
-  const MAZE_GRID = MAZE_WALL + MAZE_CELLS * MAZE_PERIOD;
-  const MAZE_CENTER = (MAZE_GRID - 1) / 2;
-
-  // Fixed objective cells so the player always starts bottom-center and
-  // escapes through the top-center alcove (consistent, readable gameplay).
-  const SPAWN_CELL = [4, 8];
-  const EXIT_CELL = [4, 0];
-
-  // How many of each entity to place, and the guardrails that keep every
-  // randomized layout fair.
-  const LANTERN_COUNT = 5;
-  const NULL_COUNT = 5;
-  const LANTERN_MIN_FROM_SPAWN = 3; // never trivially close to the start
+  const LANTERN_MIN_FROM_SPAWN = 3;
   const LANTERN_MIN_FROM_EXIT = 2;
-  const LANTERN_MIN_PAIRWISE = 3; // keep them spread across the maze
-  const NULL_MIN_FROM_SPAWN = 3; // never spawn on top of the player
-  const NULL_MIN_FROM_LANTERN = 2; // don't camp a lantern from the start
+  const LANTERN_MIN_PAIRWISE = 3;
+  const NULL_MIN_FROM_SPAWN = 3;
+  const NULL_MIN_FROM_LANTERN = 2;
   const NULL_MIN_PAIRWISE = 2;
+
+  const LEVELS = [
+    {
+      id: 1,
+      label: "Level 1 · Outer Vault",
+      clearTitle: "Outer Vault Cleared",
+      clearMessage:
+        "The outer chamber yields. Deeper halls wait beyond the sealed door.",
+      transitionTitle: "Descending into the Deep Vault…",
+      mazeCells: 9,
+      spawnCell: [4, 8],
+      exitCell: [4, 0],
+      lanternCount: 5,
+      nullCount: 5,
+      lightDrainPerSec: 1.0,
+      shadowChaseSpeed: 1.0,
+      shadowWanderSpeed: 0.5,
+      shadowDamagePerSec: 11,
+      shadowAggroRange: 2.9,
+    },
+    {
+      id: 2,
+      label: "Level 2 · Deep Vault",
+      clearTitle: "Deep Vault Cleared",
+      clearMessage:
+        "The deep vault falls quiet. The Heart of the Vault waits below.",
+      transitionTitle: "Descending into the Heart of the Vault…",
+      mazeCells: 11,
+      spawnCell: [5, 10],
+      exitCell: [5, 0],
+      lanternCount: 7,
+      nullCount: 7,
+      lightDrainPerSec: 1.35,
+      shadowChaseSpeed: 1.25,
+      shadowWanderSpeed: 0.58,
+      shadowDamagePerSec: 14,
+      shadowAggroRange: 3.1,
+    },
+    {
+      id: 3,
+      label: "Level 3 · Heart of the Vault",
+      clearTitle: "Heart of the Vault Cleared",
+      clearMessage: "The last chamber yields. The door waits with your flame.",
+      transitionTitle: "The Heart consumes the light…",
+      mazeCells: 13,
+      spawnCell: [6, 12],
+      exitCell: [6, 0],
+      lanternCount: 8,
+      nullCount: 9,
+      // Softer than first pass — still harder than L2, but enough runway to a lantern.
+      lightDrainPerSec: 1.48,
+      shadowChaseSpeed: 1.45,
+      shadowWanderSpeed: 0.65,
+      shadowDamagePerSec: 16,
+      shadowAggroRange: 3.4,
+      /** Arrive from L2 thinner than L1→L2, but not starving. */
+      carryFlameFactor: 0.55,
+      carryFlameMin: 40,
+      /** Slightly shorter torch than L1/L2. */
+      torchReachScale: 0.9,
+    },
+  ];
+
+  let currentLevelIndex = 0;
+  const levelTimesSec = [];
+  let levelStartedAt = 0;
+  /** Accumulated ms the level timer spent paused (edit mode). */
+  let levelTimerPausedMs = 0;
+  /** performance.now() when the current edit-pause started, or 0. */
+  let levelTimerPauseStartedAt = 0;
+  let transitionTimerIds = [];
+
+  /**
+   * Local-only level skip for development. Never enabled on Netlify / public hosts.
+   * Use menu picker or ?level=1|2|3 on localhost / 127.0.0.1.
+   */
+  function isLocalDevHost() {
+    const h = location.hostname;
+    return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
+  }
+
+  let debugStartLevelIndex = 0;
+
+  function readDebugLevelFromUrl() {
+    if (!isLocalDevHost()) return 0;
+    const n = parseInt(new URLSearchParams(location.search).get("level"), 10);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(LEVELS.length - 1, n - 1));
+  }
+
+  function mountDevLevelPicker() {
+    if (!isLocalDevHost() || !mainMenuEl) return;
+    if (document.getElementById("dev-level-picker")) return;
+
+    debugStartLevelIndex = readDebugLevelFromUrl();
+
+    const wrap = document.createElement("div");
+    wrap.id = "dev-level-picker";
+    wrap.className = "dev-level-picker";
+    wrap.setAttribute("aria-label", "Developer level select");
+
+    const label = document.createElement("span");
+    label.className = "dev-level-picker-label";
+    label.textContent = "Dev · start level";
+    wrap.appendChild(label);
+
+    const row = document.createElement("div");
+    row.className = "dev-level-picker-row";
+
+    LEVELS.forEach((L, i) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "dev-level-picker-btn";
+      btn.dataset.levelIndex = String(i);
+      btn.textContent = String(L.id);
+      btn.title = L.label;
+      btn.setAttribute("aria-pressed", i === debugStartLevelIndex ? "true" : "false");
+      if (i === debugStartLevelIndex) btn.classList.add("is-selected");
+      btn.addEventListener("click", () => {
+        debugStartLevelIndex = i;
+        row.querySelectorAll(".dev-level-picker-btn").forEach((b) => {
+          const on = b === btn;
+          b.classList.toggle("is-selected", on);
+          b.setAttribute("aria-pressed", on ? "true" : "false");
+        });
+        const url = new URL(location.href);
+        url.searchParams.set("level", String(L.id));
+        history.replaceState(null, "", url);
+      });
+      row.appendChild(btn);
+    });
+
+    wrap.appendChild(row);
+    const playBtn = mainMenuEl.querySelector("#play-btn");
+    if (playBtn && playBtn.parentElement) {
+      playBtn.parentElement.insertBefore(wrap, playBtn);
+    } else {
+      mainMenuEl.appendChild(wrap);
+    }
+  }
+
+  const levelRuntime = {
+    lightDrainPerSec: 1.0,
+    shadowChaseSpeed: 1.0,
+    shadowWanderSpeed: 0.5,
+    shadowDamagePerSec: 11,
+    shadowAggroRange: 2.9,
+    torchReachScale: 1,
+  };
+
+  function activeLevel() {
+    return LEVELS[currentLevelIndex];
+  }
+
+  function nextLevel() {
+    return LEVELS[currentLevelIndex + 1] || null;
+  }
+
+  function isLastLevel() {
+    return currentLevelIndex >= LEVELS.length - 1;
+  }
+
+  function syncLevelRuntime() {
+    const L = activeLevel();
+    levelRuntime.lightDrainPerSec = L.lightDrainPerSec;
+    levelRuntime.shadowChaseSpeed = L.shadowChaseSpeed;
+    levelRuntime.shadowWanderSpeed = L.shadowWanderSpeed;
+    levelRuntime.shadowDamagePerSec = L.shadowDamagePerSec;
+    levelRuntime.shadowAggroRange = L.shadowAggroRange;
+    levelRuntime.torchReachScale =
+      L.torchReachScale != null ? L.torchReachScale : 1;
+  }
+
+  function mazeGeom(level = activeLevel()) {
+    const cells = level.mazeCells;
+    const grid = MAZE_WALL + cells * MAZE_PERIOD;
+    const center = (grid - 1) / 2;
+    return { cells, grid, center, maskRadius: center };
+  }
 
   function randomMazeSeed() {
     return (Math.random() * 0xffffffff) >>> 0;
   }
 
-  // Is a maze cell inside the round disc mask?
-  function cellIncluded(cx, cy) {
-    if (cx < 0 || cy < 0 || cx >= MAZE_CELLS || cy >= MAZE_CELLS) return false;
+  function cellIncluded(cx, cy, geom = mazeGeom()) {
+    if (cx < 0 || cy < 0 || cx >= geom.cells || cy >= geom.cells) return false;
     const bx = (MAZE_PASSAGE - 1) / 2 + MAZE_WALL + cx * MAZE_PERIOD;
     const by = (MAZE_PASSAGE - 1) / 2 + MAZE_WALL + cy * MAZE_PERIOD;
-    return Math.hypot(bx - MAZE_CENTER, by - MAZE_CENTER) <= MAZE_MASK_RADIUS;
+    return Math.hypot(bx - geom.center, by - geom.center) <= geom.maskRadius;
   }
 
-  const INCLUDED_CELLS = (() => {
+  let includedCells = [];
+
+  function rebuildIncludedCells() {
+    const geom = mazeGeom();
     const cells = [];
-    for (let cy = 0; cy < MAZE_CELLS; cy++) {
-      for (let cx = 0; cx < MAZE_CELLS; cx++) {
-        if (cellIncluded(cx, cy)) cells.push([cx, cy]);
+    for (let cy = 0; cy < geom.cells; cy++) {
+      for (let cx = 0; cx < geom.cells; cx++) {
+        if (cellIncluded(cx, cy, geom)) cells.push([cx, cy]);
       }
     }
-    return cells;
-  })();
+    includedCells = cells;
+  }
 
   const cellDist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 
@@ -328,15 +576,13 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     return arr;
   }
 
-  // Pick `count` spread-out cells honoring avoid distances and pairwise spacing.
-  // Constraints relax gradually if a strict layout can't be found, so this
-  // always returns a usable set.
-  function pickSpreadCells(count, avoid, minPairwise) {
+  function pickSpreadCells(count, avoid, minPairwise, pool = includedCells) {
+    const source = pool.length ? pool : includedCells;
     for (let relax = 0; relax <= 6; relax++) {
       const mp = Math.max(0, minPairwise - relax);
       for (let attempt = 0; attempt < 200; attempt++) {
         const chosen = [];
-        for (const cell of shuffledCells(INCLUDED_CELLS)) {
+        for (const cell of shuffledCells(source)) {
           if (chosen.length >= count) break;
           const okAvoid = avoid.every(
             (a) => cellDist(a.cell, cell) >= Math.max(0, a.min - relax)
@@ -348,30 +594,52 @@ import { createProximityMap } from "./proximity-map.js?v=1";
         if (chosen.length >= count) return chosen;
       }
     }
-    return shuffledCells(INCLUDED_CELLS).slice(0, count);
+    return shuffledCells(source).slice(0, count);
+  }
+
+  function openFloorCells() {
+    // Only place entities on maze cells whose passage tile is actually carved.
+    return includedCells.filter(([cx, cy]) => {
+      const t = cellFloorTile(cx, cy);
+      return (
+        t.row >= 0 &&
+        t.col >= 0 &&
+        t.row < MAP_ROWS &&
+        t.col < MAP_COLS &&
+        LEVEL_MAP[t.row][t.col] === 0
+      );
+    });
   }
 
   function pickEntityCells() {
+    const L = activeLevel();
+    const pool = openFloorCells();
     const lanterns = pickSpreadCells(
-      LANTERN_COUNT,
+      L.lanternCount,
       [
-        { cell: SPAWN_CELL, min: LANTERN_MIN_FROM_SPAWN },
-        { cell: EXIT_CELL, min: LANTERN_MIN_FROM_EXIT },
+        { cell: L.spawnCell, min: LANTERN_MIN_FROM_SPAWN },
+        { cell: L.exitCell, min: LANTERN_MIN_FROM_EXIT },
       ],
-      LANTERN_MIN_PAIRWISE
+      LANTERN_MIN_PAIRWISE,
+      pool
     );
     const nulls = pickSpreadCells(
-      NULL_COUNT,
+      L.nullCount,
       [
-        { cell: SPAWN_CELL, min: NULL_MIN_FROM_SPAWN },
+        { cell: L.spawnCell, min: NULL_MIN_FROM_SPAWN },
         ...lanterns.map((cell) => ({ cell, min: NULL_MIN_FROM_LANTERN })),
       ],
-      NULL_MIN_PAIRWISE
+      NULL_MIN_PAIRWISE,
+      pool.filter(
+        (cell) =>
+          !lanterns.some(
+            (l) => l[0] === cell[0] && l[1] === cell[1]
+          )
+      )
     );
     return { lanterns, nulls };
   }
 
-  // Active layout for the current run (refreshed by regenerateMaze()).
   let activeLanternCells = [];
   let activeNullCells = [];
 
@@ -386,7 +654,6 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     };
   }
 
-  // Lower-left tile of a cell's passage block (always open floor).
   function cellFloorTile(cellX, cellY) {
     return {
       col: MAZE_WALL + cellX * MAZE_PERIOD,
@@ -395,10 +662,11 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   }
 
   function generateVaultMaze(seed) {
-    const grid = MAZE_GRID;
-    const map = Array.from({ length: grid }, () => new Array(grid).fill(1));
-
-    const included = cellIncluded;
+    const L = activeLevel();
+    const geom = mazeGeom(L);
+    const map = Array.from({ length: geom.grid }, () =>
+      new Array(geom.grid).fill(1)
+    );
 
     const carveBlock = (cx, cy) => {
       const x0 = MAZE_WALL + cx * MAZE_PERIOD;
@@ -421,10 +689,10 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     };
 
     const rng = mazeRng(seed);
-    const visited = Array.from({ length: MAZE_CELLS }, () =>
-      new Array(MAZE_CELLS).fill(false)
+    const visited = Array.from({ length: geom.cells }, () =>
+      new Array(geom.cells).fill(false)
     );
-    const [startX, startY] = SPAWN_CELL;
+    const [startX, startY] = L.spawnCell;
     const stack = [[startX, startY]];
     visited[startY][startX] = true;
     carveBlock(startX, startY);
@@ -436,7 +704,9 @@ import { createProximityMap } from "./proximity-map.js?v=1";
       for (const [dx, dy] of dirs) {
         const nx = cx + dx;
         const ny = cy + dy;
-        if (included(nx, ny) && !visited[ny][nx]) opts.push([dx, dy, nx, ny]);
+        if (cellIncluded(nx, ny, geom) && !visited[ny][nx]) {
+          opts.push([dx, dy, nx, ny]);
+        }
       }
       if (!opts.length) {
         stack.pop();
@@ -451,10 +721,12 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     return map;
   }
 
-  const LEVEL_MAP = generateVaultMaze(randomMazeSeed());
+  syncLevelRuntime();
+  rebuildIncludedCells();
 
-  const MAP_ROWS = LEVEL_MAP.length;
-  const MAP_COLS = LEVEL_MAP[0].length;
+  let LEVEL_MAP = generateVaultMaze(randomMazeSeed());
+  let MAP_ROWS = LEVEL_MAP.length;
+  let MAP_COLS = LEVEL_MAP[0].length;
 
   const proximityMap = proxMapCanvas
     ? createProximityMap(proxMapCanvas, {
@@ -464,47 +736,77 @@ import { createProximityMap } from "./proximity-map.js?v=1";
       })
     : null;
 
-  // Choose the initial randomized-but-fair entity layout.
   ({ lanterns: activeLanternCells, nulls: activeNullCells } = pickEntityCells());
 
-  // Generate a fresh maze in place (keeps the LEVEL_MAP reference stable so the
-  // 3D world's captured array stays valid), reshuffle the fair entity layout,
-  // and rebuild the 3D walls.
   function regenerateMaze() {
+    rebuildIncludedCells();
     const fresh = generateVaultMaze(randomMazeSeed());
-    for (let r = 0; r < fresh.length; r++) {
-      for (let c = 0; c < fresh[r].length; c++) {
-        LEVEL_MAP[r][c] = fresh[r][c];
+    const sameSize =
+      fresh.length === MAP_ROWS &&
+      fresh[0] &&
+      fresh[0].length === MAP_COLS &&
+      LEVEL_MAP.length === MAP_ROWS;
+
+    if (sameSize) {
+      for (let r = 0; r < fresh.length; r++) {
+        for (let c = 0; c < fresh[r].length; c++) {
+          LEVEL_MAP[r][c] = fresh[r][c];
+        }
       }
+    } else {
+      LEVEL_MAP = fresh;
+      MAP_ROWS = fresh.length;
+      MAP_COLS = fresh[0].length;
     }
+
     ({ lanterns: activeLanternCells, nulls: activeNullCells } = pickEntityCells());
+
     if (world3d && typeof world3d.rebuildLevel === "function") {
-      world3d.rebuildLevel();
+      world3d.rebuildLevel({
+        levelMap: LEVEL_MAP,
+        mapRows: MAP_ROWS,
+        mapCols: MAP_COLS,
+      });
+    }
+    if (proximityMap && typeof proximityMap.setMap === "function") {
+      proximityMap.setMap(LEVEL_MAP, MAP_ROWS, MAP_COLS);
     }
   }
 
   async function initWorld3D() {
     if (!USE_3D_WORLD) return;
-    const { createWorld3D } = await import("./world3d.js?v=null_fix_1");
-    world3d = createWorld3D(canvas, {
-      levelMap: LEVEL_MAP,
-      mapRows: MAP_ROWS,
-      mapCols: MAP_COLS,
-      fov: FOV,
-    });
-    window.__world3d = world3d;
-    if (player3dCanvas && !USE_3D_PLAYER) {
-      player3dCanvas.style.display = "block";
-      player3dCanvas.style.visibility = "visible";
-      avatarCtx = player3dCanvas.getContext("2d");
-      avatarCtx.imageSmoothingEnabled = true;
+    try {
+      const { createWorld3D } = await import("./world3d.js?v=level3_2");
+      world3d = createWorld3D(canvas, {
+        levelMap: LEVEL_MAP,
+        mapRows: MAP_ROWS,
+        mapCols: MAP_COLS,
+        fov: FOV,
+      });
+      window.__world3d = world3d;
+      if (player3dCanvas && !USE_3D_PLAYER) {
+        player3dCanvas.style.display = "block";
+        player3dCanvas.style.visibility = "visible";
+        avatarCtx = player3dCanvas.getContext("2d");
+        avatarCtx.imageSmoothingEnabled = true;
+      }
+      syncViewportSize();
+    } catch (err) {
+      console.error("[game] 3D world failed to load", err);
+      world3d = null;
     }
-    syncViewportSize();
   }
 
-  // Tile center in map coordinates (x = col, y = row)
   function tileCenter(col, row) {
     return { x: col + 0.5, y: row + 0.5 };
+  }
+
+  /** Center of a carved maze passage block (MAZE_PASSAGE × MAZE_PASSAGE). */
+  function passageCenter(col, row) {
+    return {
+      x: col + MAZE_PASSAGE * 0.5,
+      y: row + MAZE_PASSAGE * 0.5,
+    };
   }
 
   function isWall(mx, my) {
@@ -514,17 +816,51 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     return LEVEL_MAP[row][col] === 1;
   }
 
+  /**
+   * Face an open corridor from spawn, preferring the direction toward the exit.
+   * Hard-coding -PI/2 often stares into the wall immediately north of the
+   * spawn block when the maze carved a different first opening.
+   */
+  function spawnFacingAngle(x, y, exitX, exitY) {
+    const dirs = [
+      { angle: 0, dx: 1, dy: 0 },
+      { angle: Math.PI, dx: -1, dy: 0 },
+      { angle: Math.PI / 2, dx: 0, dy: 1 },
+      { angle: -Math.PI / 2, dx: 0, dy: -1 },
+    ];
+    const toExitX = exitX - x;
+    const toExitY = exitY - y;
+    const exitLen = Math.hypot(toExitX, toExitY) || 1;
+    const ex = toExitX / exitLen;
+    const ey = toExitY / exitLen;
+
+    let best = null;
+    let bestScore = -Infinity;
+    for (const d of dirs) {
+      // Probe past the current passage block into the next tile.
+      if (isWall(x + d.dx * 1.1, y + d.dy * 1.1)) continue;
+      const towardExit = d.dx * ex + d.dy * ey;
+      const score = towardExit + 0.15; // slight bias so ties prefer openness
+      if (score > bestScore) {
+        bestScore = score;
+        best = d.angle;
+      }
+    }
+    return best == null ? -Math.PI / 2 : best;
+  }
+
   // ============================================
   // GAME STATE
   // ============================================
 
-  // Per-Null wander seeds so they don't move in lockstep.
   const NULL_SEEDS = [
     { wanderAngle: 0.6, wanderTimer: 0.0, floatPhase: 0.0, faceAngle: 0 },
     { wanderAngle: 2.4, wanderTimer: 1.2, floatPhase: 2.1, faceAngle: Math.PI },
     { wanderAngle: 1.1, wanderTimer: 0.5, floatPhase: 3.4, faceAngle: Math.PI / 2 },
     { wanderAngle: 4.0, wanderTimer: 2.0, floatPhase: 1.0, faceAngle: -Math.PI / 2 },
     { wanderAngle: 5.3, wanderTimer: 0.9, floatPhase: 4.7, faceAngle: 0 },
+    { wanderAngle: 3.2, wanderTimer: 1.5, floatPhase: 5.2, faceAngle: Math.PI * 0.75 },
+    { wanderAngle: 0.2, wanderTimer: 0.7, floatPhase: 2.8, faceAngle: -Math.PI * 0.25 },
   ];
 
   let state = createInitialState();
@@ -534,12 +870,15 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   let frameDt = 1 / 60;
   const flameSigSmooth = { r: 255, g: 160, b: 40, cue: "neutral", power: 0 };
 
-  function createInitialState() {
-    // Bottom-center spawn → top-center exit alcove.
-    const s = cellFloorTile(SPAWN_CELL[0], SPAWN_CELL[1]);
-    const e = cellFloorTile(EXIT_CELL[0], EXIT_CELL[1]);
-    const start = tileCenter(s.col, s.row);
+  function createInitialState(opts = {}) {
+    const L = activeLevel();
+    const s = cellFloorTile(L.spawnCell[0], L.spawnCell[1]);
+    const e = cellFloorTile(L.exitCell[0], L.exitCell[1]);
+    const start = passageCenter(s.col, s.row);
     const exitPos = tileCenter(e.col, e.row);
+    const startLight =
+      opts.light != null ? Math.max(0, Math.min(LIGHT_MAX, opts.light)) : LIGHT_MAX;
+    const startAngle = spawnFacingAngle(start.x, start.y, exitPos.x, exitPos.y);
 
     const lanterns = activeLanternCells.map((cell, i) => {
       const t = cellFloorTile(cell[0], cell[1]);
@@ -562,14 +901,14 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     });
 
     return {
-      status: "menu", // "menu" | "playing" | "won" | "lost"
+      status: "menu", // menu | playing | levelClear | transitioning | won | lost
 
       player: {
         x: start.x,
         y: start.y,
-        angle: -Math.PI / 2, // facing north (toward the exit)
+        angle: startAngle,
         pitch: PITCH_DEFAULT,
-        light: LIGHT_MAX,
+        light: startLight,
       },
 
       lanterns,
@@ -603,6 +942,25 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   };
 
   window.addEventListener("keydown", (e) => {
+    if (e.code === "F2") {
+      e.preventDefault();
+      if (
+        placementEditor &&
+        (state.status === "playing" || placementEditor.active)
+      ) {
+        placementEditor.toggle();
+      }
+      return;
+    }
+
+    // While editing: still move/look, but block interact + restart (R is easy to hit).
+    if (placementEditor?.active) {
+      if (e.code === "KeyE" || e.code === "KeyR") {
+        e.preventDefault();
+        return;
+      }
+    }
+
     switch (e.code) {
       case "KeyW":
       case "ArrowUp":
@@ -641,7 +999,13 @@ import { createProximityMap } from "./proximity-map.js?v=1";
         e.preventDefault();
         break;
       case "Escape":
-        if (state.status === "playing" || state.status === "won" || state.status === "lost") {
+        if (
+          state.status === "playing" ||
+          state.status === "levelClear" ||
+          state.status === "transitioning" ||
+          state.status === "won" ||
+          state.status === "lost"
+        ) {
           showMainMenu();
           e.preventDefault();
         }
@@ -680,10 +1044,37 @@ import { createProximityMap } from "./proximity-map.js?v=1";
 
   // Optional mouse look when canvas is clicked
   let pointerLocked = false;
+  let editLookDragging = false;
+  let editLookLastX = 0;
+  let editLookLastY = 0;
+
   canvas.addEventListener("click", () => {
+    if (placementEditor?.active) return;
     if (state.status === "playing") {
       canvas.requestPointerLock?.();
     }
+  });
+
+  canvas.addEventListener("pointerdown", (e) => {
+    if (!placementEditor?.active || state.status !== "playing") return;
+    if (e.button !== 2) return;
+    editLookDragging = true;
+    editLookLastX = e.clientX;
+    editLookLastY = e.clientY;
+    canvas.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+  });
+
+  canvas.addEventListener("pointerup", (e) => {
+    if (e.button === 2) editLookDragging = false;
+  });
+
+  canvas.addEventListener("pointercancel", () => {
+    editLookDragging = false;
+  });
+
+  canvas.addEventListener("contextmenu", (e) => {
+    if (placementEditor?.active) e.preventDefault();
   });
 
   document.addEventListener("pointerlockchange", () => {
@@ -691,7 +1082,23 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   });
 
   document.addEventListener("mousemove", (e) => {
-    if (!pointerLocked || state.status !== "playing") return;
+    if (state.status !== "playing") return;
+
+    if (placementEditor?.active) {
+      if (!editLookDragging) return;
+      const dx = e.clientX - editLookLastX;
+      const dy = e.clientY - editLookLastY;
+      editLookLastX = e.clientX;
+      editLookLastY = e.clientY;
+      state.player.angle += dx * MOUSE_LOOK_SENS;
+      state.player.pitch = Math.max(
+        PITCH_MIN,
+        Math.min(PITCH_MAX, state.player.pitch - dy * MOUSE_LOOK_SENS)
+      );
+      return;
+    }
+
+    if (!pointerLocked) return;
     state.player.angle += e.movementX * MOUSE_LOOK_SENS;
     state.player.pitch = Math.max(
       PITCH_MIN,
@@ -703,6 +1110,13 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     playButtonPushSfx(restartBtn);
     startGame();
   });
+
+  if (continueBtn) {
+    continueBtn.addEventListener("click", () => {
+      playButtonPushSfx(continueBtn);
+      beginLevelTransition();
+    });
+  }
 
   if (playBtn) {
     playBtn.addEventListener("click", () => {
@@ -817,7 +1231,9 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     if (rep.mag < 0.05) return { mx, my };
     const moveLen = Math.hypot(mx, my);
     if (moveLen < 1e-6) {
-      const fleeSpeed = chasing ? SHADOW_CHASE_SPEED : SHADOW_WANDER_SPEED;
+      const fleeSpeed = chasing
+        ? levelRuntime.shadowChaseSpeed
+        : levelRuntime.shadowWanderSpeed;
       return {
         mx: (rep.ax / rep.mag) * fleeSpeed * dt,
         my: (rep.ay / rep.mag) * fleeSpeed * dt,
@@ -839,7 +1255,7 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     let ty = shadow.y + my;
     if (isInsideLitLanternZone(tx, ty)) {
       if (rep.mag < 0.05) return 0;
-      const escape = Math.hypot(mx, my) || SHADOW_WANDER_SPEED * dt;
+      const escape = Math.hypot(mx, my) || levelRuntime.shadowWanderSpeed * dt;
       tx = shadow.x + (rep.ax / rep.mag) * escape;
       ty = shadow.y + (rep.ay / rep.mag) * escape;
     }
@@ -849,7 +1265,8 @@ import { createProximityMap } from "./proximity-map.js?v=1";
 
   function getViewDistance() {
     const t = Math.pow(state.player.light / LIGHT_MAX, LIGHTING.viewDistCurve);
-    return VIEW_DIST_MIN + (VIEW_DIST_MAX - VIEW_DIST_MIN) * t;
+    const base = VIEW_DIST_MIN + (VIEW_DIST_MAX - VIEW_DIST_MIN) * t;
+    return base * (levelRuntime.torchReachScale || 1);
   }
 
   function smoothFlameSig(raw, dt) {
@@ -870,7 +1287,7 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   // PLAYER UPDATE
   // ============================================
 
-  function updatePlayer(dt) {
+  function updatePlayer(dt, { freezeThreats = false } = {}) {
     const p = state.player;
 
     if (keys.turnLeft) p.angle -= TURN_SPEED * dt;
@@ -904,6 +1321,9 @@ import { createProximityMap } from "./proximity-map.js?v=1";
       bobPhase += dt * 12;
     }
 
+    // Edit mode: navigate freely with no flame drain / death.
+    if (freezeThreats) return;
+
     // Light drain / recharge near lit lanterns
     let recharging = false;
     for (const lantern of state.lanterns) {
@@ -917,7 +1337,7 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     if (recharging) {
       p.light = Math.min(LIGHT_MAX, p.light + LIGHT_RECHARGE_PER_SEC * dt);
     } else {
-      p.light = Math.max(0, p.light - LIGHT_DRAIN_PER_SEC * dt);
+      p.light = Math.max(0, p.light - levelRuntime.lightDrainPerSec * dt);
     }
 
     if (p.light <= 0) {
@@ -946,7 +1366,10 @@ import { createProximityMap } from "./proximity-map.js?v=1";
 
     if (nearestUnlit && nearestDist <= LANTERN_INTERACT_RANGE) {
       state.prompt = "Press E to light the lantern";
-      if (keys.interactPressed) nearestUnlit.lit = true;
+      if (keys.interactPressed) {
+        nearestUnlit.lit = true;
+        playLanternLightSfx();
+      }
     }
 
     const litCount = state.lanterns.filter((l) => l.lit).length;
@@ -955,7 +1378,9 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     if (state.exit.unlocked) {
       const dExit = dist(p.x, p.y, state.exit.x, state.exit.y);
       if (dExit <= EXIT_INTERACT_RANGE) {
-        state.prompt = "Press E to leave the vault";
+        state.prompt = isLastLevel()
+          ? "Press E to leave the vault"
+          : "Press E to descend deeper";
         if (keys.interactPressed) winGame();
       }
     }
@@ -998,7 +1423,7 @@ import { createProximityMap } from "./proximity-map.js?v=1";
           shadow.chaseCooldown = SHADOW_CHASE_COOLDOWN;
         }
       } else if (
-        playerDist < SHADOW_AGGRO_RANGE &&
+        playerDist < levelRuntime.shadowAggroRange &&
         !playerHaven &&
         !rep.inside &&
         shadow.chaseCooldown <= 0
@@ -1015,7 +1440,7 @@ import { createProximityMap } from "./proximity-map.js?v=1";
         const len = Math.hypot(dx, dy) || 1;
         const closeBoost = Math.min(1, playerDist / 1.6);
         const speed =
-          SHADOW_CHASE_SPEED *
+          levelRuntime.shadowChaseSpeed *
           (0.72 + 0.28 * closeBoost) *
           (1 + 0.05 * Math.sin(shadow.floatPhase * 1.4));
         mx = (dx / len) * speed * dt;
@@ -1028,7 +1453,9 @@ import { createProximityMap } from "./proximity-map.js?v=1";
         }
         const drift = Math.sin(shadow.floatPhase * 0.55 + shadow.id) * 0.08;
         const angle = shadow.wanderAngle + drift;
-        const speed = SHADOW_WANDER_SPEED * (0.85 + 0.15 * Math.sin(shadow.floatPhase * 0.9));
+        const speed =
+          levelRuntime.shadowWanderSpeed *
+          (0.85 + 0.15 * Math.sin(shadow.floatPhase * 0.9));
         mx = Math.cos(angle) * speed * dt;
         my = Math.sin(angle) * speed * dt;
       }
@@ -1047,7 +1474,7 @@ import { createProximityMap } from "./proximity-map.js?v=1";
       }
 
       if (playerDist < SHADOW_TOUCH_RANGE && !playerHaven) {
-        p.light = Math.max(0, p.light - SHADOW_DAMAGE_PER_SEC * dt);
+        p.light = Math.max(0, p.light - levelRuntime.shadowDamagePerSec * dt);
         if (p.light <= 0) {
           loseGame("A Null swallowed the last flame.");
         }
@@ -1069,37 +1496,186 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   }
 
   // ============================================
-  // WIN / LOSE / RESTART
+  // WIN / LOSE / LEVEL TRANSITION
   // ============================================
 
-  let runStartedAt = 0;
+  function getLevelElapsedSec() {
+    if (levelStartedAt <= 0) {
+      return levelTimesSec[currentLevelIndex] != null
+        ? levelTimesSec[currentLevelIndex]
+        : 0;
+    }
+    const now = performance.now();
+    let paused = levelTimerPausedMs;
+    if (levelTimerPauseStartedAt > 0) {
+      paused += now - levelTimerPauseStartedAt;
+    }
+    return Math.max(0, (now - levelStartedAt - paused) / 1000);
+  }
+
+  function setEditGameplayPaused(paused) {
+    if (paused) {
+      if (levelTimerPauseStartedAt <= 0 && levelStartedAt > 0) {
+        levelTimerPauseStartedAt = performance.now();
+      }
+      stopNullBreath();
+      if (document.pointerLockElement) document.exitPointerLock?.();
+    } else if (levelTimerPauseStartedAt > 0) {
+      levelTimerPausedMs += performance.now() - levelTimerPauseStartedAt;
+      levelTimerPauseStartedAt = 0;
+    }
+  }
+
+  function recordCurrentLevelTime() {
+    if (levelStartedAt <= 0) return;
+    levelTimesSec[currentLevelIndex] = getLevelElapsedSec();
+    levelStartedAt = 0;
+    levelTimerPausedMs = 0;
+    levelTimerPauseStartedAt = 0;
+  }
+
+  function totalRunTimeSec() {
+    let total = 0;
+    for (let i = 0; i < levelTimesSec.length; i++) {
+      total += levelTimesSec[i] || 0;
+    }
+    return total;
+  }
+
+  function formatLevelTime(sec) {
+    const s = Math.max(0, Math.floor(sec));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${m}:${String(r).padStart(2, "0")}`;
+  }
+
+  function clearTransitionTimers() {
+    for (const id of transitionTimerIds) window.clearTimeout(id);
+    transitionTimerIds = [];
+  }
+
+  function showLevelTransition(title) {
+    if (!levelTransitionEl) return;
+    if (levelTransitionTitleEl) levelTransitionTitleEl.textContent = title;
+    levelTransitionEl.classList.remove("hidden");
+    // Reflow so the opacity transition runs after display flips on.
+    void levelTransitionEl.offsetWidth;
+    levelTransitionEl.classList.add("is-visible");
+  }
+
+  function hideLevelTransition() {
+    if (!levelTransitionEl) return;
+    levelTransitionEl.classList.remove("is-visible");
+    window.setTimeout(() => {
+      if (
+        levelTransitionEl &&
+        !levelTransitionEl.classList.contains("is-visible")
+      ) {
+        levelTransitionEl.classList.add("hidden");
+      }
+    }, 450);
+  }
 
   function winGame() {
     if (state.status !== "playing") return;
+    if (!isLastLevel()) {
+      clearLevel();
+      return;
+    }
     state.status = "won";
     if (document.pointerLockElement) document.exitPointerLock?.();
-    if (runStartedAt > 0) {
-      recordLeaderboardRun((performance.now() - runStartedAt) / 1000);
-    }
+    stopNullBreath();
+    recordCurrentLevelTime();
+    recordLeaderboardRun(totalRunTimeSec());
     showOverlay(
       "You Escaped",
-      "Mimu carried the last light through the vault. The door sealed the dark behind you.",
-      false
+      "Mimu carried the last light through every chamber. The door sealed the dark behind you.",
+      false,
+      { mode: "restart" }
     );
   }
 
+  function clearLevel() {
+    if (state.status !== "playing") return;
+    state.status = "levelClear";
+    if (document.pointerLockElement) document.exitPointerLock?.();
+    stopNullBreath();
+    recordCurrentLevelTime();
+    const L = activeLevel();
+    showOverlay(
+      L.clearTitle,
+      L.clearMessage || "A deeper chamber waits beyond.",
+      false,
+      { mode: "continue" }
+    );
+  }
+
+  function beginLevelTransition() {
+    const next = nextLevel();
+    if (!next || state.status === "transitioning") return;
+
+    const carryFactor =
+      next.carryFlameFactor != null ? next.carryFlameFactor : CARRY_FLAME_FACTOR;
+    const carryMin =
+      next.carryFlameMin != null ? next.carryFlameMin : CARRY_FLAME_MIN;
+    const carried = Math.max(carryMin, state.player.light * carryFactor);
+    const fromLevel = activeLevel();
+    state.status = "transitioning";
+    stopNullBreath();
+    hideOverlay();
+    showLevelTransition(
+      fromLevel.transitionTitle || `Entering ${next.label}…`
+    );
+
+    clearTransitionTimers();
+    transitionTimerIds.push(
+      window.setTimeout(() => {
+        loadLevel(currentLevelIndex + 1, { carriedLight: carried });
+        state.status = "transitioning";
+      }, 500)
+    );
+    transitionTimerIds.push(
+      window.setTimeout(() => {
+        hideLevelTransition();
+        if (state.status === "transitioning") state.status = "playing";
+      }, 1700)
+    );
+  }
+
+  function loadLevel(index, { carriedLight = LIGHT_MAX } = {}) {
+    currentLevelIndex = Math.max(0, Math.min(LEVELS.length - 1, index));
+    syncLevelRuntime();
+    regenerateMaze();
+    state = createInitialState({ light: carriedLight });
+    levelStartedAt = performance.now();
+    levelTimerPausedMs = 0;
+    levelTimerPauseStartedAt = 0;
+    keys.interactPressed = false;
+    keys.restartPressed = false;
+    bobPhase = 0;
+    updateUI();
+  }
+
   function loseGame(message) {
+    if (placementEditor?.active) return;
     if (state.status !== "playing") return;
     state.status = "lost";
     if (document.pointerLockElement) document.exitPointerLock?.();
-    showOverlay("Flame Extinguished", message, true);
+    stopNullBreath();
+    levelStartedAt = 0;
+    levelTimerPausedMs = 0;
+    levelTimerPauseStartedAt = 0;
+    showOverlay("Flame Extinguished", message, true, { mode: "restart" });
   }
 
-  function showOverlay(title, message, isLose) {
+  function showOverlay(title, message, isLose, opts = {}) {
+    const mode = opts.mode || "restart";
     overlayTitleEl.textContent = title;
     overlayMessageEl.textContent = message;
     overlayEl.classList.toggle("lose", isLose);
     overlayCardEl.classList.toggle("lose", isLose);
+    if (continueBtn) continueBtn.classList.toggle("hidden", mode !== "continue");
+    if (restartBtn) restartBtn.classList.toggle("hidden", mode === "continue");
     overlayEl.classList.remove("hidden");
   }
 
@@ -1108,22 +1684,23 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   }
 
   function syncMenuVideos(playing) {
-    for (const el of [menuLogoVideoEl, menuCornerVideoEl]) {
-      if (!el) continue;
-      if (playing) {
-        el.play().catch(() => {});
-      } else {
-        el.pause();
-      }
+    if (!menuLogoVideoEl) return;
+    if (playing) {
+      menuLogoVideoEl.play().catch(() => {});
+    } else {
+      menuLogoVideoEl.pause();
     }
   }
 
   function showMainMenu() {
     if (document.pointerLockElement) document.exitPointerLock?.();
+    clearTransitionTimers();
+    hideLevelTransition();
     state.status = "menu";
     hideOverlay();
     if (mainMenuEl) mainMenuEl.classList.remove("hidden");
     if (gameUiEl) gameUiEl.classList.add("hidden");
+    if (runeBorderEl) runeBorderEl.classList.remove("hidden");
     keys.interactPressed = false;
     keys.restartPressed = false;
     if (player3d) player3d.setVisible(false);
@@ -1133,18 +1710,30 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     }
     syncMenuVideos(true);
     stopAmbient();
+    stopNullBreath();
     musicPlayer.resumePlaylist();
   }
 
   function startGame() {
-    regenerateMaze(); // fresh random maze each run
-    state = createInitialState();
+    clearTransitionTimers();
+    hideLevelTransition();
+    // Production always starts at L1. Local host may skip via picker / ?level=.
+    currentLevelIndex = isLocalDevHost() ? debugStartLevelIndex : 0;
+    levelTimesSec.length = 0;
+    for (let i = 0; i < currentLevelIndex; i++) levelTimesSec[i] = 0;
+    syncLevelRuntime();
+    regenerateMaze();
+    // Full flame when jumping in from the menu (incl. L3 skip) so you can test.
+    state = createInitialState({ light: LIGHT_MAX });
     state.status = "playing";
-    runStartedAt = performance.now();
+    levelStartedAt = performance.now();
+    levelTimerPausedMs = 0;
+    levelTimerPauseStartedAt = 0;
     hideOverlay();
     if (mainMenuEl) mainMenuEl.classList.add("hidden");
     syncMenuVideos(false);
     if (gameUiEl) gameUiEl.classList.remove("hidden");
+    if (runeBorderEl) runeBorderEl.classList.add("hidden");
     if (proxMapWrapEl) {
       proxMapWrapEl.classList.remove("is-hidden");
       proxMapWrapEl.setAttribute("aria-hidden", "false");
@@ -1160,7 +1749,6 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     flameSigSmooth.power = 0;
     updateUI();
     syncViewportSize();
-    // Re-sync after layout paints (prevents 1×1 canvas)
     requestAnimationFrame(() => {
       syncViewportSize();
       if (player3d) player3d.setVisible(true);
@@ -1168,6 +1756,11 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     if (player3d) player3d.setVisible(true);
     musicPlayer.playExclusive(GAME_TRACK, { loop: true });
     startAmbient();
+    if (placementEditor && shouldAutoOpenPlacementEditor()) {
+      placementEditor.setActive(true);
+    } else {
+      placementEditor?.refreshTargetList?.();
+    }
   }
 
   function resetGame() {
@@ -1212,6 +1805,19 @@ import { createProximityMap } from "./proximity-map.js?v=1";
     lightFillEl.style.width = `${pct}%`;
     lightPercentEl.textContent = `${pct}%`;
     lightFillEl.classList.toggle("low", light < 30);
+
+    if (levelIndicatorEl) {
+      levelIndicatorEl.textContent = activeLevel().label;
+    }
+    if (levelTimerEl) {
+      let elapsed = 0;
+      if (state.status === "playing" && levelStartedAt > 0) {
+        elapsed = getLevelElapsedSec();
+      } else if (levelTimesSec[currentLevelIndex] != null) {
+        elapsed = levelTimesSec[currentLevelIndex];
+      }
+      levelTimerEl.textContent = formatLevelTime(elapsed);
+    }
 
     updateLanternUI();
   }
@@ -1871,6 +2477,7 @@ import { createProximityMap } from "./proximity-map.js?v=1";
       player3dCanvas.style.filter = LIGHTING.avatarFilter;
 
       player3d.render();
+      placementEditor?.renderOverlays?.();
 
       if (isCue) {
         if (!player3d.bloomEnabled) {
@@ -1993,8 +2600,10 @@ import { createProximityMap } from "./proximity-map.js?v=1";
         light,
         bob: bob / 4,
         animTime,
+        torchReachScale: levelRuntime.torchReachScale,
       });
       world3d.render();
+      placementEditor?.renderOverlays?.();
 
       drawHeldFlame(flameSig);
       drawVignetteAndFlameLight();
@@ -2036,8 +2645,25 @@ import { createProximityMap } from "./proximity-map.js?v=1";
   function update(dt) {
     if (keys.restartPressed) {
       keys.restartPressed = false;
-      if (state.status === "playing" || state.status === "won" || state.status === "lost") {
+      if (placementEditor?.active) {
+        // R is blocked while editing; ignore any stale restart press.
+      } else if (state.status === "levelClear") {
+        beginLevelTransition();
+        return;
+      } else if (
+        state.status === "playing" ||
+        state.status === "won" ||
+        state.status === "lost"
+      ) {
         startGame();
+      }
+      return;
+    }
+
+    if (state.status === "levelClear") {
+      if (keys.interactPressed) {
+        keys.interactPressed = false;
+        beginLevelTransition();
       }
       return;
     }
@@ -2047,10 +2673,22 @@ import { createProximityMap } from "./proximity-map.js?v=1";
       return;
     }
 
+    // Edit mode: move/look freely; freeze Nulls, flame drain, and lose conditions.
+    if (placementEditor?.active) {
+      if (keys.restartPressed) keys.restartPressed = false;
+      updatePlayer(dt, { freezeThreats: true });
+      updateUI();
+      placementEditor.update(dt);
+      keys.interactPressed = false;
+      return;
+    }
+
     updatePlayer(dt);
     updateLanterns();
     updateShadows(dt);
+    updateNullBreathAudio();
     updateUI();
+    placementEditor?.update(dt);
 
     keys.interactPressed = false;
   }
@@ -2075,6 +2713,15 @@ import { createProximityMap } from "./proximity-map.js?v=1";
 
   // Boot — land on the main menu
   Promise.all([initPlayer3D(), initWorld3D()]).then(() => {
+    placementEditor = createPlacementEditor({
+      worldApi: () => world3d?.getEditorApi?.() || null,
+      playerApi: () => player3d?.getEditorApi?.() || null,
+      isPlaying: () => state.status === "playing",
+      onActiveChange(active) {
+        setEditGameplayPaused(active);
+      },
+    });
+    mountDevLevelPicker();
     showMainMenu();
     requestAnimationFrame(frame);
   });

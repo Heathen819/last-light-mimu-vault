@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Last Light: Mimu Vault</title>
-  <link rel="stylesheet" href="style.css?v=map_5" />
+  <link rel="stylesheet" href="style.css?v=dev_level_1" />
 </head>
 <body>
   <div id="game-wrapper">
@@ -23,10 +23,10 @@
         >
           <img
             class="menu-dropdown-glyph"
-            src="assets/ui/menu-glyph.png?v=3"
+            src="assets/ui/menu-glyph.png?v=4"
             alt=""
-            width="94"
-            height="101"
+            width="156"
+            height="257"
             decoding="async"
           />
           <span class="menu-dropdown-chevron" aria-hidden="true">▾</span>
@@ -89,28 +89,6 @@
       </div>
       </div>
 
-      <a
-        href="https://mimusniper.xyz"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="menu-corner-stack"
-        aria-label="Visit the Mimu Sniper Site"
-        title="Visit the Mimu Sniper Site"
-      >
-        <video
-          id="menu-corner-video"
-          class="menu-corner-video"
-          src="assets/ui/menu-corner-loop.mp4?v=1"
-          autoplay
-          muted
-          loop
-          playsinline
-          disablepictureinpicture
-          aria-hidden="true"
-        ></video>
-        <span class="menu-corner-caption">Visit the Mimu Sniper Site</span>
-      </a>
-
       <div class="volume-panel volume-panel--corner" aria-label="Music volume">
         <div class="volume-row">
           <button
@@ -161,6 +139,8 @@
         <div id="title-block">
           <h1>Last Light</h1>
           <p class="subtitle">Mimu Vault</p>
+          <p id="level-indicator" class="level-indicator">Level 1 · Outer Vault</p>
+          <p id="level-timer" class="level-timer" aria-label="Level time">0:00</p>
         </div>
 
         <div id="light-meter-wrap">
@@ -206,16 +186,22 @@
       </footer>
     </div>
 
-    <!-- Win / Lose overlay -->
+    <!-- Win / Lose / Level-clear overlay -->
     <div id="overlay" class="hidden">
       <div id="overlay-card">
         <h2 id="overlay-title">You Escaped</h2>
         <p id="overlay-message">The last flame found the door.</p>
         <div class="overlay-actions">
+          <button id="continue-btn" type="button" class="hidden">Continue (E)</button>
           <button id="restart-btn" type="button">Play Again (R)</button>
           <button id="menu-btn" type="button" class="btn-secondary">Main Menu</button>
         </div>
       </div>
+    </div>
+
+    <!-- Floor-to-floor transition (simple fade; video hook later) -->
+    <div id="level-transition" class="hidden" aria-live="polite" aria-atomic="true">
+      <p id="level-transition-title">Descending…</p>
     </div>
   </div>
 
@@ -227,7 +213,7 @@
       }
     }
   </script>
-  <script type="module" src="game.js?v=map_3"></script>
+  <script type="module" src="game.js?v=dev_level_1"></script>
 
   <!-- ========== MIMU RUNE BORDER ========== -->
   <div class="mimu-rune-border" aria-hidden="true">

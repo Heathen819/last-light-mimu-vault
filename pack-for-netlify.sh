@@ -23,7 +23,7 @@ mkdir -p \
 
 echo "Packing core files..."
 cp "$ROOT/index.html" "$ROOT/leaderboard.html" "$ROOT/lore.html" "$ROOT/sign-in.html" "$ROOT/profile.html" "$ROOT/style.css" "$DEST/"
-cp "$ROOT/game.js" "$ROOT/world3d.js" "$ROOT/player3d.js" "$ROOT/enemysprite.js" "$ROOT/site-nav.js" "$ROOT/ui-sfx.js" "$ROOT/auth.js" "$ROOT/music-player.js" "$ROOT/proximity-map.js" "$DEST/"
+cp "$ROOT/game.js" "$ROOT/world3d.js" "$ROOT/player3d.js" "$ROOT/enemysprite.js" "$ROOT/site-nav.js" "$ROOT/ui-sfx.js" "$ROOT/auth.js" "$ROOT/music-player.js" "$ROOT/proximity-map.js" "$ROOT/placement-offsets.js" "$ROOT/placement-editor.js" "$ROOT/stone-path-texture.js" "$DEST/"
 
 echo "Packing 3D models..."
 cp "$ROOT/assets/player/banker_torch_animated_18.glb" "$DEST/assets/player/"
@@ -33,25 +33,32 @@ cp "$ROOT/assets/objects/lanterns/rock-crystal-lantern.glb" "$DEST/assets/object
 cp "$ROOT/torch_flame_animation_2.0.glb" "$DEST/" 2>/dev/null || true
 
 echo "Packing environment..."
+# Only the wall sets world3d.js actually loads (v1 + v2). The unversioned
+# cave-wall-0X.png and new-cave-wall-X.PNG copies are unreferenced originals.
 cp "$ROOT/assets/environment/crystal-cave-ref.jpg" "$DEST/assets/environment/"
-cp "$ROOT/assets/environment/cave-floor.png" "$DEST/assets/environment/"
-cp "$ROOT/assets/environment/cave-walls/"*.png "$DEST/assets/environment/cave-walls/"
+mkdir -p "$DEST/assets/environment/cave-walls/v1" "$DEST/assets/environment/cave-walls/v2"
+cp "$ROOT/assets/environment/cave-walls/v1/"*.png "$DEST/assets/environment/cave-walls/v1/"
+cp "$ROOT/assets/environment/cave-walls/v2/"*.png "$DEST/assets/environment/cave-walls/v2/"
 
 echo "Packing UI + audio..."
 cp "$ROOT/assets/ui/menu-glyph.png" "$DEST/assets/ui/"
 cp "$ROOT/assets/ui/last-light-logo.png" "$DEST/assets/ui/"
 cp "$ROOT/assets/ui/menu-logo-loop.mp4" "$DEST/assets/ui/"
-cp "$ROOT/assets/ui/menu-corner-loop.mp4" "$DEST/assets/ui/"
 cp "$ROOT/assets/ui/enter-vault-btn.png" "$DEST/assets/ui/"
 cp "$ROOT/assets/ui/vault-menu-bg.png" "$DEST/assets/ui/"
 cp "$ROOT/assets/avatars/"*.png "$DEST/assets/avatars/"
 cp "$ROOT/assets/fonts/BreatheFireIii-PKLOB.ttf" "$DEST/assets/fonts/"
 cp "$ROOT/assets/fonts/AlienAlphabet-nRRqJ.otf" "$DEST/assets/fonts/"
-cp "$ROOT/assets/audio/theme.mp3" "$DEST/assets/audio/"
-cp "$ROOT/assets/audio/deus-avarus-menu.mp3" "$DEST/assets/audio/"
-cp "$ROOT/assets/audio/music/"*.mp3 "$DEST/assets/audio/music/" 2>/dev/null || true
-cp "$ROOT/assets/audio/music/"*.wav "$DEST/assets/audio/music/" 2>/dev/null || true
+cp "$ROOT/assets/fonts/MimuGlyphScript.ttf" "$DEST/assets/fonts/"
+# Audio: only tracks referenced by music-player.js (menu), game.js (in-game),
+# and ui-sfx.js (button push). Everything else in assets/audio is unused.
+cp "$ROOT/assets/audio/Tilt-a-whisper edited.mp3" "$DEST/assets/audio/"
+cp "$ROOT/assets/audio/music/Vault of Echoes in-game.mp3" "$DEST/assets/audio/music/"
 cp "$ROOT/assets/audio/sfx/mixkit-creepy-cavern-ambience-loop-2492.wav" "$DEST/assets/audio/sfx/"
+cp "$ROOT/assets/audio/sfx/mixkit-heavy-sword-hit-2794.wav" "$DEST/assets/audio/sfx/"
+cp "$ROOT/assets/audio/sfx/mixkit-positive-game-alert-3151.wav" "$DEST/assets/audio/sfx/"
+cp "$ROOT/assets/audio/mixkit-fire-swoosh-burning-1328.wav" "$DEST/assets/audio/"
+cp "$ROOT/assets/audio/mixkit-single-zombie-breath-2233.wav" "$DEST/assets/audio/"
 cp "$ROOT/assets/player/mimu-fp.png" "$DEST/assets/player/" 2>/dev/null || true
 cp "$ROOT/assets/characters/villains/"*.png "$DEST/assets/characters/villains/" 2>/dev/null || true
 
@@ -112,7 +119,7 @@ OPTION A — Drag & drop (fastest)
   1. Run pack-for-netlify.command (or ./pack-for-netlify.sh) in the project folder
   2. Go to https://app.netlify.com/drop
   3. Drag this "Mimu Vault Deploy" folder onto the page
-  4. Wait for upload (~130 MB — banker + shadow GLBs are large)
+  4. Wait for upload (~360 MB — banker, shadow, and torch-flame GLBs are large)
   5. Hard refresh the live site after deploy (Cmd+Shift+R / Ctrl+Shift+R)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

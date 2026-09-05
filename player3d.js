@@ -10,6 +10,7 @@ import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
 import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { applyPlacementFor } from "./placement-offsets.js?v=2";
 
 /** Layer mask — only meshes on this layer feed the bloom pass. */
 const BLOOM_LAYER = 1;
@@ -277,6 +278,7 @@ export function createPlayer3D(canvas) {
 
   function darkenNonBloomed(obj) {
     if (!obj.isMesh || bloomLayerMask.test(obj.layers)) return;
+    if (obj.userData?.skipBloomDarken) return;
     if (bloomSavedMaterials[obj.uuid]) return;
     bloomSavedMaterials[obj.uuid] = obj.material;
     obj.material = bloomDarkMaterial;
@@ -991,6 +993,16 @@ export function createPlayer3D(canvas) {
     parent.add(flameAnchor);
     flameAnchor.position.copy(localPos);
     flameAnchor.rotation.set(0, 0, 0);
+    flameAnchor.scale.set(1, 1, 1);
+    flameAnchor.userData.torchBaseLocal = {
+      position: {
+        x: flameAnchor.position.x,
+        y: flameAnchor.position.y,
+        z: flameAnchor.position.z,
+      },
+      rotation: { x: 0, y: 0, z: 0 },
+      scale: { x: 1, y: 1, z: 1 },
+    };
     flameAttached = true;
     const anchorKind = findTorchEmberObject(parent) ? "named-node" : "mesh-ember-centroid";
     console.log("[player3d] flame anchor", anchorKind, localPos.toArray().map((v) => +v.toFixed(4)));
@@ -1687,16 +1699,23 @@ export function createPlayer3D(canvas) {
     const bobMul = mixer ? ANIMATED_AVATAR_BOB_MUL : 1;
     idlePhase += dt;
 
+    let basePosX;
+    let basePosY;
+    let basePosZ;
+    let baseRotX;
+    let baseRotY;
+    let baseRotZ;
+
     if (moving) {
       const bobX = Math.sin(bobPhase * 0.9) * 0.028 * bobMul;
       const bobY = Math.abs(Math.sin(bobPhase)) * 0.022 * bobMul;
       const bobZ = Math.cos(bobPhase * 0.9) * 0.012 * bobMul;
-      root.position.x = pose.x + bobX;
-      root.position.y = pose.y + bobY;
-      root.position.z = pose.z + bobZ;
-      root.rotation.y = pose.yaw + Math.sin(bobPhase * 0.45) * 0.032 * bobMul;
-      root.rotation.z = Math.sin(bobPhase * 0.9) * 0.038 * bobMul;
-      root.rotation.x = Math.abs(Math.sin(bobPhase)) * 0.022 * bobMul;
+      basePosX = pose.x + bobX;
+      basePosY = pose.y + bobY;
+      basePosZ = pose.z + bobZ;
+      baseRotY = pose.yaw + Math.sin(bobPhase * 0.45) * 0.032 * bobMul;
+      baseRotZ = Math.sin(bobPhase * 0.9) * 0.038 * bobMul;
+      baseRotX = Math.abs(Math.sin(bobPhase)) * 0.022 * bobMul;
     } else {
       // Subtle procedural idle — gentle breathing + slow sway so the avatar
       // reads as "alive" while standing. Purely positional/rotational on the
@@ -1704,19 +1723,50 @@ export function createPlayer3D(canvas) {
       const breatheY = Math.sin(idlePhase * IDLE_BREATHE_SPEED) * IDLE_BREATHE_AMP;
       const swayZ = Math.sin(idlePhase * IDLE_SWAY_SPEED) * IDLE_SWAY_AMP;
       const driftYaw = Math.sin(idlePhase * IDLE_YAW_SPEED) * IDLE_YAW_AMP;
-      root.position.x = pose.x;
-      root.position.y = pose.y + breatheY;
-      root.position.z = pose.z;
-      root.rotation.y = pose.yaw + driftYaw;
-      root.rotation.z = swayZ;
-      root.rotation.x = 0;
+      basePosX = pose.x;
+      basePosY = pose.y + breatheY;
+      basePosZ = pose.z;
+      baseRotY = pose.yaw + driftYaw;
+      baseRotZ = swayZ;
+      baseRotX = 0;
     }
+
+    const playerScale = pose.scale || 1;
+    applyPlacementFor(root, "player", {
+      position: { x: basePosX, y: basePosY, z: basePosZ },
+      rotation: { x: baseRotX, y: baseRotY, z: baseRotZ },
+      scale: { x: playerScale, y: playerScale, z: playerScale },
+    });
 
     flameTint.setRGB(flame.r / 255, flame.g / 255, flame.b / 255);
     if (ready) {
       frameRaisedArm();
       if (torchRoot) torchRoot.updateMatrixWorld(true);
       if (builtinTorchNode) builtinTorchNode.updateMatrixWorld(true);
+      if (flameAttached && flameAnchor?.userData?.torchBaseLocal) {
+        applyPlacementFor(flameAnchor, "torch", flameAnchor.userData.torchBaseLocal);
+      } else if (torchRoot) {
+        if (!torchRoot.userData.torchBaseLocal) {
+          torchRoot.userData.torchBaseLocal = {
+            position: {
+              x: torchRoot.position.x,
+              y: torchRoot.position.y,
+              z: torchRoot.position.z,
+            },
+            rotation: {
+              x: torchRoot.rotation.x,
+              y: torchRoot.rotation.y,
+              z: torchRoot.rotation.z,
+            },
+            scale: {
+              x: torchRoot.scale.x,
+              y: torchRoot.scale.y,
+              z: torchRoot.scale.z,
+            },
+          };
+        }
+        applyPlacementFor(torchRoot, "torch", torchRoot.userData.torchBaseLocal);
+      }
     }
     updateFlameSpriteAnim(dt, light, isCue, isBlue, isRed, flame, moving);
 
@@ -1870,5 +1920,30 @@ export function createPlayer3D(canvas) {
     update,
     render,
     dispose,
+    getEditorApi() {
+      return {
+        scene,
+        camera,
+        renderer,
+        domElement: canvas,
+        listTargets() {
+          const targets = [
+            { id: "player", label: "Player avatar", scene: "player" },
+          ];
+          if (flameAttached || torchRoot) {
+            targets.push({ id: "torch", label: "Torch / flame tip", scene: "player" });
+          }
+          return targets;
+        },
+        getObject(id) {
+          if (id === "player") return root;
+          if (id === "torch") {
+            if (flameAttached && flameAnchor) return flameAnchor;
+            return torchRoot || null;
+          }
+          return null;
+        },
+      };
+    },
   };
 }

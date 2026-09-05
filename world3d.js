@@ -5,6 +5,8 @@
 
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { applyPlacementFor } from "./placement-offsets.js?v=2";
+import { createStonePathCanvas } from "./stone-path-texture.js?v=2";
 
 const NULL_GLB_VARIANTS = [
   "assets/enemies/null-black-gray-green-eyes3.glb?v=null1",
@@ -19,19 +21,75 @@ const LANTERN_ROTATION_Y = Math.PI;
 /** Raise lantern flame / glow bloom (+screen px, converted to world Y). */
 const LANTERN_FLAME_Y_NUDGE_PX = 50;
 const LANTERN_FLAME_DEPTH_REF = 2;
-/** Additive bloom halos around lit lantern flame orbs. */
+/** Additive bloom halos around lit lantern flames (vertical ellipsoids). */
 const LANTERN_BLOOM_LAYERS = [
-  { scale: 0.1, opacity: 0.936 },
-  { scale: 0.17, opacity: 0.442 },
-  { scale: 0.26, opacity: 0.182 },
+  { scaleX: 0.07, scaleY: 0.13, opacity: 0.9 },
+  { scaleX: 0.12, scaleY: 0.22, opacity: 0.42 },
+  { scaleX: 0.18, scaleY: 0.32, opacity: 0.16 },
 ];
 const LANTERN_FLAME_EMISSIVE = 2.6;
 const LANTERN_GLOW_INTENSITY = 1.75;
 const LANTERN_GLOW_DISTANCE = 5.5;
+const _lanternGlowColor = new THREE.Color();
+const _lanternGlowWarm = new THREE.Color(0xff9020);
+const _lanternGlowHot = new THREE.Color(0xffe080);
 const EXIT_GLOW_INTENSITY = 2.1;
 const EXIT_GLOW_DISTANCE = 8;
 const EXIT_FLAME_EMISSIVE = 2.8;
 const EXIT_LOCKED_EMISSIVE = 0.35;
+const EXIT_VAULT_RADIUS = 0.62;
+const EXIT_VAULT_Y = 0.72;
+const EXIT_METAL_LOCKED = 0x8a6a42;
+const EXIT_METAL_UNLOCKED = 0xc49a55;
+const EXIT_RIM_LOCKED = 0x6a5234;
+const EXIT_RIM_UNLOCKED = 0xa88448;
+
+let vaultMetalMap = null;
+
+/** One-shot brushed bronze canvas map for the vault door. */
+function getVaultMetalTexture() {
+  if (vaultMetalMap) return vaultMetalMap;
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#8a7048";
+  ctx.fillRect(0, 0, size, size);
+  for (let y = 0; y < size; y++) {
+    const a = 0.03 + Math.random() * 0.09;
+    ctx.fillStyle =
+      Math.random() > 0.5
+        ? `rgba(255, 230, 180, ${a})`
+        : `rgba(35, 26, 16, ${a})`;
+    ctx.fillRect(0, y, size, 1);
+  }
+  for (let i = 0; i < 5000; i++) {
+    const x = (Math.random() * size) | 0;
+    const y = (Math.random() * size) | 0;
+    ctx.fillStyle = `rgba(255, 240, 200, ${Math.random() * 0.07})`;
+    ctx.fillRect(x, y, 1, 1);
+  }
+  vaultMetalMap = new THREE.CanvasTexture(canvas);
+  vaultMetalMap.colorSpace = THREE.SRGBColorSpace;
+  vaultMetalMap.wrapS = THREE.RepeatWrapping;
+  vaultMetalMap.wrapT = THREE.RepeatWrapping;
+  vaultMetalMap.repeat.set(2.2, 2.2);
+  vaultMetalMap.needsUpdate = true;
+  return vaultMetalMap;
+}
+
+function makeVaultMetalMaterial(colorHex, opts = {}) {
+  return new THREE.MeshStandardMaterial({
+    color: colorHex,
+    map: getVaultMetalTexture(),
+    metalness: opts.metalness ?? 0.92,
+    roughness: opts.roughness ?? 0.32,
+    emissive: opts.emissive ?? 0x000000,
+    emissiveIntensity: opts.emissiveIntensity ?? 0,
+    side: THREE.DoubleSide,
+  });
+}
 
 // ── Environment lighting ──────────────────────────────────────────────
 // Walls/floor/ceiling are LIT materials so the torch and lit lanterns create
@@ -44,7 +102,12 @@ const ENV_HEMI_GROUND = 0x140e24;
 const ENV_HEMI_INTENSITY = 0.1; // lifted a hair (was 0.06)
 const ENV_WALL_ROUGHNESS = 0.95;
 const ENV_WALL_METALNESS = 0.0;
+// Fraction of the source image shown per wall tile. Lower = larger-looking texture.
+const WALL_TEX_REPEAT_U = 0.36; // ~2.8× wider
+const WALL_TEX_REPEAT_V = 0.42; // ~2.4× taller
 const ENV_FLOOR_ROUGHNESS = 0.98;
+/** Tint multiplied over the stone path texture. Lower/darker = darker floor. */
+const ENV_FLOOR_TINT = 0x807a96;
 const ENV_CEIL_ROUGHNESS = 1.0;
 
 // Player torch light — bright pool tight around the player, short reach so it
@@ -64,16 +127,79 @@ function lanternFlameY(baseY) {
   return baseY + nudge;
 }
 const CAVE_ENV_URL = "assets/environment/crystal-cave-ref.jpg";
-const CAVE_FLOOR_URL = "assets/environment/cave-floor.png";
-const CAVE_WALL_URLS = [
-  "assets/environment/cave-walls/cave-wall-01.png",
-  "assets/environment/cave-walls/cave-wall-02.png",
-  "assets/environment/cave-walls/cave-wall-03.png",
-  "assets/environment/cave-walls/cave-wall-04.png",
-  "assets/environment/cave-walls/cave-wall-05.png",
-  "assets/environment/cave-walls/cave-wall-06.png",
-  "assets/environment/cave-walls/cave-wall-07.png",
+/** World units covered by one floor texture tile. Lower = smaller slabs. */
+const FLOOR_TILE_WORLD_UNITS = 1.6;
+
+/** Original crystal-wall set (kept for revert via ?walls=v1). */
+const WALL_SET_V1 = [
+  "assets/environment/cave-walls/v1/cave-wall-01.png",
+  "assets/environment/cave-walls/v1/cave-wall-02.png",
+  "assets/environment/cave-walls/v1/cave-wall-03.png",
+  "assets/environment/cave-walls/v1/cave-wall-04.png",
+  "assets/environment/cave-walls/v1/cave-wall-05.png",
+  "assets/environment/cave-walls/v1/cave-wall-06.png",
+  "assets/environment/cave-walls/v1/cave-wall-07.png",
 ];
+/** New cave-wall plates (default). */
+const WALL_SET_V2 = [
+  "assets/environment/cave-walls/v2/wall-01.png",
+  "assets/environment/cave-walls/v2/wall-02.png",
+  "assets/environment/cave-walls/v2/wall-03.png",
+  "assets/environment/cave-walls/v2/wall-04.png",
+];
+
+function resolveWallSetUrls() {
+  let set = "v2";
+  try {
+    const q = new URLSearchParams(window.location.search).get("walls");
+    if (q === "v1" || q === "v2") set = q;
+  } catch {
+    /* ignore */
+  }
+  return set === "v1" ? WALL_SET_V1 : WALL_SET_V2;
+}
+
+const CAVE_WALL_URLS = resolveWallSetUrls();
+
+/**
+ * Assign a texture index to each wall cell so orthogonal neighbors prefer
+ * different plates. Falls back to any index if every neighbor bans a choice.
+ */
+function assignWallTextureIndices(wallMeshes, texCount, seed) {
+  const rng = seededRand(seed >>> 0);
+  const assigned = new Map();
+  const key = (c, r) => `${c},${r}`;
+  const dirs = [
+    [1, 0],
+    [-1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+
+  const cells = wallMeshes
+    .map((g) => ({
+      g,
+      c: g.userData.wallCol,
+      r: g.userData.wallRow,
+    }))
+    .sort((a, b) => a.r - b.r || a.c - b.c);
+
+  for (const cell of cells) {
+    const banned = new Set();
+    for (const [dc, dr] of dirs) {
+      const n = assigned.get(key(cell.c + dc, cell.r + dr));
+      if (n != null) banned.add(n);
+    }
+    const choices = [];
+    for (let i = 0; i < texCount; i++) {
+      if (!banned.has(i)) choices.push(i);
+    }
+    const pool = choices.length ? choices : [...Array(texCount).keys()];
+    const idx = pool[Math.floor(rng() * pool.length)];
+    assigned.set(key(cell.c, cell.r), idx);
+    cell.g.userData.wallTexIdx = idx;
+  }
+}
 
 const EYE_HEIGHT = 0.52;
 const WALL_HEIGHT = 2.45;
@@ -85,9 +211,9 @@ const CAVE_CROPS = {
 };
 
 export function createWorld3D(canvas, options = {}) {
-  const levelMap = options.levelMap;
-  const mapRows = options.mapRows;
-  const mapCols = options.mapCols;
+  let levelMap = options.levelMap;
+  let mapRows = options.mapRows;
+  let mapCols = options.mapCols;
   const fov = options.fov ?? Math.PI / 3;
 
   const renderer = new THREE.WebGLRenderer({
@@ -267,26 +393,17 @@ export function createWorld3D(canvas, options = {}) {
       g.add(post, cage);
     }
 
-    const flame = new THREE.Mesh(
-      new THREE.SphereGeometry(0.085, 10, 10),
-      new THREE.MeshStandardMaterial({
-        color: 0xffdd66,
-        emissive: 0xffaa33,
-        emissiveIntensity: LANTERN_FLAME_EMISSIVE,
-        toneMapped: false,
-      })
-    );
+    const flame = createLanternFlameGroup();
     flame.position.y = lanternFlameY(flameY);
-    flame.name = "flame";
 
     const bloomOrbs = new THREE.Group();
     bloomOrbs.name = "bloomOrbs";
     bloomOrbs.position.y = lanternFlameY(flameY);
     for (const layer of LANTERN_BLOOM_LAYERS) {
       const orb = new THREE.Mesh(
-        new THREE.SphereGeometry(layer.scale, 10, 10),
+        new THREE.SphereGeometry(1, 10, 10),
         new THREE.MeshBasicMaterial({
-          color: 0xffd060,
+          color: 0xffb040,
           transparent: true,
           opacity: layer.opacity,
           blending: THREE.AdditiveBlending,
@@ -294,12 +411,14 @@ export function createWorld3D(canvas, options = {}) {
           toneMapped: false,
         })
       );
+      orb.scale.set(layer.scaleX, layer.scaleY, layer.scaleX);
+      orb.position.y = layer.scaleY * 0.15;
       orb.renderOrder = 12;
       bloomOrbs.add(orb);
     }
 
     const glow = new THREE.PointLight(0xffc050, 0, LANTERN_GLOW_DISTANCE, 1.45);
-    glow.position.y = lanternFlameY(flameY) + 0.02;
+    glow.position.y = lanternFlameY(flameY) + 0.06;
     glow.name = "glow";
 
     g.add(flame, bloomOrbs, glow);
@@ -307,12 +426,80 @@ export function createWorld3D(canvas, options = {}) {
     return g;
   }
 
+  /** Layered teardrop flame — hot core, orange body, additive tip. */
+  function createLanternFlameGroup() {
+    const flame = new THREE.Group();
+    flame.name = "flame";
+
+    const core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.028, 8, 8),
+      new THREE.MeshStandardMaterial({
+        color: 0xfff2c0,
+        emissive: 0xffeeaa,
+        emissiveIntensity: LANTERN_FLAME_EMISSIVE * 1.15,
+        toneMapped: false,
+        transparent: true,
+        depthWrite: false,
+      })
+    );
+    core.name = "flameCore";
+    core.position.y = 0.02;
+    core.renderOrder = 13;
+
+    const body = new THREE.Mesh(
+      new THREE.ConeGeometry(0.052, 0.155, 10, 1, true),
+      new THREE.MeshStandardMaterial({
+        color: 0xffa028,
+        emissive: 0xff7a18,
+        emissiveIntensity: LANTERN_FLAME_EMISSIVE,
+        toneMapped: false,
+        transparent: true,
+        opacity: 0.95,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      })
+    );
+    body.name = "flameBody";
+    body.position.y = 0.08;
+    body.renderOrder = 12;
+
+    const tip = new THREE.Mesh(
+      new THREE.ConeGeometry(0.028, 0.1, 8, 1, true),
+      new THREE.MeshBasicMaterial({
+        color: 0xff6020,
+        transparent: true,
+        opacity: 0.72,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        toneMapped: false,
+      })
+    );
+    tip.name = "flameTip";
+    tip.position.y = 0.16;
+    tip.renderOrder = 14;
+
+    flame.add(core, body, tip);
+    flame.visible = false;
+    return flame;
+  }
+
   function ensureLanternBody(g) {
     if (!lanternTemplate) return;
     const body = g.getObjectByName("body");
     if (body?.userData?.isGlbLantern) return;
 
-    if (body) g.remove(body);
+    // Drop placeholder meshes (post/cage) before attaching the GLB body.
+    for (const child of [...g.children]) {
+      if (
+        child.name === "flame" ||
+        child.name === "bloomOrbs" ||
+        child.name === "glow"
+      ) {
+        continue;
+      }
+      g.remove(child);
+    }
 
     const model = lanternTemplate.clone(true);
     model.name = "body";
@@ -379,33 +566,93 @@ export function createWorld3D(canvas, options = {}) {
 
   function createExitGroup() {
     const g = new THREE.Group();
+    const r = EXIT_VAULT_RADIUS;
 
-    const frame = new THREE.Mesh(
-      new THREE.BoxGeometry(0.85, 1.35, 0.12),
-      new THREE.MeshStandardMaterial({
-        color: 0x1a1430,
-        emissive: 0x000000,
-        emissiveIntensity: 0,
-        roughness: 0.85,
-      })
-    );
-    frame.position.y = 0.68;
-    frame.name = "frame";
+    // Face group: local Y = door thickness (world ±Z after rotateX).
+    const face = new THREE.Group();
+    face.name = "vaultFace";
+    face.position.y = EXIT_VAULT_Y;
+    face.rotation.x = Math.PI / 2;
+
+    const doorMat = makeVaultMetalMaterial(EXIT_METAL_LOCKED, {
+      emissive: 0x3a2010,
+      emissiveIntensity: EXIT_LOCKED_EMISSIVE,
+      roughness: 0.34,
+    });
+    const rimMat = makeVaultMetalMaterial(EXIT_RIM_LOCKED, {
+      metalness: 0.95,
+      roughness: 0.28,
+    });
+    const trimMat = makeVaultMetalMaterial(0x9a7850, {
+      metalness: 0.9,
+      roughness: 0.36,
+    });
 
     const door = new THREE.Mesh(
-      new THREE.BoxGeometry(0.62, 1.05, 0.08),
-      new THREE.MeshStandardMaterial({
-        color: 0x2a1848,
-        emissive: 0x331808,
-        emissiveIntensity: EXIT_LOCKED_EMISSIVE,
-        roughness: 0.72,
-      })
+      new THREE.CylinderGeometry(r, r, 0.1, 48),
+      doorMat
     );
-    door.position.y = 0.62;
     door.name = "door";
 
+    // Torus defaults to XY (hole along Z). Rotate so hole matches the door
+    // cylinder axis (local Y) and the ring sits coplanar with the vault face.
+    const frame = new THREE.Mesh(
+      new THREE.TorusGeometry(r + 0.045, 0.055, 14, 48),
+      rimMat
+    );
+    frame.name = "frame";
+    frame.rotation.x = Math.PI / 2;
+
+    // Concentric ribs on the door face.
+    for (const ribR of [r * 0.72, r * 0.48]) {
+      const rib = new THREE.Mesh(
+        new THREE.TorusGeometry(ribR, 0.018, 8, 40),
+        trimMat
+      );
+      rib.rotation.x = Math.PI / 2;
+      rib.position.y = 0.055;
+      face.add(rib);
+    }
+
+    // Rim bolts.
+    const boltGeo = new THREE.CylinderGeometry(0.028, 0.028, 0.07, 6);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const bolt = new THREE.Mesh(boltGeo, trimMat);
+      bolt.position.set(
+        Math.cos(a) * (r - 0.07),
+        0.07,
+        Math.sin(a) * (r - 0.07)
+      );
+      face.add(bolt);
+    }
+
+    // Center vault wheel.
+    const wheel = new THREE.Mesh(
+      new THREE.TorusGeometry(0.17, 0.03, 10, 28),
+      rimMat
+    );
+    wheel.rotation.x = Math.PI / 2;
+    wheel.position.y = 0.08;
+    face.add(wheel);
+    for (let i = 0; i < 4; i++) {
+      const spoke = new THREE.Mesh(
+        new THREE.BoxGeometry(0.34, 0.035, 0.04),
+        trimMat
+      );
+      spoke.position.y = 0.08;
+      spoke.rotation.y = (i / 4) * Math.PI;
+      face.add(spoke);
+    }
+    const hub = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.055, 0.055, 0.09, 12),
+      rimMat
+    );
+    hub.position.y = 0.09;
+    face.add(hub);
+
     const doorFlame = new THREE.Mesh(
-      new THREE.SphereGeometry(0.1, 10, 10),
+      new THREE.SphereGeometry(0.08, 10, 10),
       new THREE.MeshStandardMaterial({
         color: 0xffdd66,
         emissive: 0xffaa33,
@@ -413,7 +660,7 @@ export function createWorld3D(canvas, options = {}) {
         toneMapped: false,
       })
     );
-    doorFlame.position.set(0.2, 0.72, 0.06);
+    doorFlame.position.set(0, 0.16, 0);
     doorFlame.name = "doorFlame";
 
     const doorBloom = new THREE.Group();
@@ -421,7 +668,7 @@ export function createWorld3D(canvas, options = {}) {
     doorBloom.position.copy(doorFlame.position);
     for (const layer of LANTERN_BLOOM_LAYERS) {
       const orb = new THREE.Mesh(
-        new THREE.SphereGeometry(layer.scale * 1.15, 10, 10),
+        new THREE.SphereGeometry(1, 10, 10),
         new THREE.MeshBasicMaterial({
           color: 0xffc040,
           transparent: true,
@@ -431,6 +678,7 @@ export function createWorld3D(canvas, options = {}) {
           toneMapped: false,
         })
       );
+      orb.scale.set(layer.scaleX * 1.15, layer.scaleY * 1.15, layer.scaleX * 1.15);
       orb.renderOrder = 12;
       doorBloom.add(orb);
     }
@@ -439,7 +687,8 @@ export function createWorld3D(canvas, options = {}) {
     doorGlow.position.copy(doorFlame.position);
     doorGlow.name = "doorGlow";
 
-    g.add(frame, door, doorFlame, doorBloom, doorGlow);
+    face.add(door, frame, doorFlame, doorBloom, doorGlow);
+    g.add(face);
     scene.add(g);
     return g;
   }
@@ -453,10 +702,25 @@ export function createWorld3D(canvas, options = {}) {
 
     const lanternAnimTime = data.animTime || 0;
 
+    // Hide extras when a later floor (more lanterns) returns to an earlier one.
+    for (let i = lanterns.length; i < lanternMeshes.length; i++) {
+      const extra = lanternMeshes[i];
+      if (!extra) continue;
+      extra.visible = false;
+      const glow = extra.getObjectByName("glow");
+      if (glow) glow.intensity = 0;
+    }
+
     lanterns.forEach((lantern, i) => {
       const g = lanternMeshes[i];
       ensureLanternBody(g);
-      g.position.set(lantern.x, 0, lantern.y);
+      g.visible = true;
+      const base = {
+        position: { x: lantern.x, y: 0, z: lantern.y },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+      };
+      applyPlacementFor(g, `lantern:${i}`, base);
       const body = g.getObjectByName("body");
       const flame = g.getObjectByName("flame");
       const bloomOrbs = g.getObjectByName("bloomOrbs");
@@ -471,21 +735,70 @@ export function createWorld3D(canvas, options = {}) {
         0.15 *
           (0.6 * Math.sin(lanternAnimTime * 9 + i * 1.7) +
             0.4 * Math.sin(lanternAnimTime * 15 + i * 3.1));
+      const sway = Math.sin(lanternAnimTime * 7.2 + i * 2.3) * 0.12;
+      const sway2 = Math.sin(lanternAnimTime * 11.1 + i * 1.4) * 0.08;
 
       if (body) body.visible = true;
       if (flame) {
         flame.visible = lit;
-        if (lit && flame.material) {
-          flame.material.emissiveIntensity = LANTERN_FLAME_EMISSIVE * flicker;
+        if (lit) {
+          const core = flame.getObjectByName("flameCore");
+          const flameBody = flame.getObjectByName("flameBody");
+          const tip = flame.getObjectByName("flameTip");
+          const stretchY = 1.12 + 0.38 * flicker;
+          const stretchXZ = 0.88 + 0.14 * flicker;
+
+          if (core?.material) {
+            core.material.emissiveIntensity =
+              LANTERN_FLAME_EMISSIVE * 1.15 * flicker;
+            core.scale.setScalar(0.92 + 0.16 * flicker);
+          }
+          if (flameBody) {
+            flameBody.scale.set(stretchXZ, stretchY, stretchXZ);
+            flameBody.rotation.z = sway;
+            flameBody.rotation.x = sway2 * 0.65;
+            if (flameBody.material?.emissiveIntensity != null) {
+              flameBody.material.emissiveIntensity =
+                LANTERN_FLAME_EMISSIVE * flicker;
+            }
+          }
+          if (tip) {
+            tip.scale.set(
+              0.85 + 0.2 * flicker,
+              1.2 + 0.45 * flicker,
+              0.85 + 0.2 * flicker
+            );
+            tip.position.y = 0.15 + 0.04 * flicker;
+            tip.rotation.z = sway * 1.35;
+            tip.rotation.x = sway2;
+            if (tip.material) {
+              tip.material.opacity = 0.55 + 0.3 * flicker;
+            }
+          }
         }
       }
       if (bloomOrbs) {
         bloomOrbs.visible = lit;
-        if (lit) bloomOrbs.scale.setScalar(0.9 + 0.14 * flicker);
+        if (lit) {
+          bloomOrbs.scale.set(
+            0.88 + 0.1 * flicker,
+            0.95 + 0.22 * flicker,
+            0.88 + 0.1 * flicker
+          );
+          bloomOrbs.rotation.z = sway * 0.5;
+        }
       }
       if (glow) {
         glow.visible = lit;
-        glow.intensity = lit ? LANTERN_GLOW_INTENSITY * flicker : 0;
+        if (lit) {
+          glow.intensity = LANTERN_GLOW_INTENSITY * flicker;
+          _lanternGlowColor
+            .copy(_lanternGlowWarm)
+            .lerp(_lanternGlowHot, (flicker - 0.85) / 0.15);
+          glow.color.copy(_lanternGlowColor);
+        } else {
+          glow.intensity = 0;
+        }
       }
     });
 
@@ -493,12 +806,20 @@ export function createWorld3D(canvas, options = {}) {
       nullMeshes.push(null);
     }
 
+    for (let i = shadows.length; i < nullMeshes.length; i++) {
+      if (nullMeshes[i]) nullMeshes[i].visible = false;
+    }
+
     shadows.forEach((shadow, i) => {
       const mesh = ensureNullMesh(i, shadow);
       if (!mesh) return;
       const bob = shadow.bob || 0;
-      mesh.position.set(shadow.x, bob + NULL_FLOAT_BASE_Y, shadow.y);
-      mesh.rotation.y = shadow.faceAngle ?? 0;
+      const base = {
+        position: { x: shadow.x, y: bob + NULL_FLOAT_BASE_Y, z: shadow.y },
+        rotation: { x: 0, y: shadow.faceAngle ?? 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+      };
+      applyPlacementFor(mesh, `null:${i}`, base);
       mesh.visible = true;
     });
 
@@ -507,7 +828,12 @@ export function createWorld3D(canvas, options = {}) {
     }
     if (exit) {
       const animTime = data.animTime || 0;
-      exitMesh.position.set(exit.x, 0, exit.y);
+      const exitBase = {
+        position: { x: exit.x, y: 0, z: exit.y },
+        rotation: { x: 0, y: 0, z: 0 },
+        scale: { x: 1, y: 1, z: 1 },
+      };
+      applyPlacementFor(exitMesh, "exit", exitBase);
       const frame = exitMesh.getObjectByName("frame");
       const door = exitMesh.getObjectByName("door");
       const doorFlame = exitMesh.getObjectByName("doorFlame");
@@ -519,16 +845,20 @@ export function createWorld3D(canvas, options = {}) {
         : 0.55 + 0.15 * Math.sin(animTime * 1.6);
 
       if (frame?.material) {
-        frame.material.color.setHex(unlocked ? 0x4a3018 : 0x1a1430);
-        frame.material.emissive.setHex(unlocked ? 0x2a1408 : 0x000000);
-        frame.material.emissiveIntensity = unlocked ? 0.22 * pulse : 0;
+        frame.material.color.setHex(
+          unlocked ? EXIT_RIM_UNLOCKED : EXIT_RIM_LOCKED
+        );
+        frame.material.emissive.setHex(unlocked ? 0x5a3010 : 0x1a1008);
+        frame.material.emissiveIntensity = unlocked ? 0.35 * pulse : 0.05;
       }
       if (door?.material) {
-        door.material.emissive.setHex(unlocked ? 0xffa030 : 0xff6018);
+        door.material.color.setHex(
+          unlocked ? EXIT_METAL_UNLOCKED : EXIT_METAL_LOCKED
+        );
+        door.material.emissive.setHex(unlocked ? 0xffa030 : 0x4a2810);
         door.material.emissiveIntensity = unlocked
-          ? 0.95 * pulse
+          ? 0.85 * pulse
           : EXIT_LOCKED_EMISSIVE * pulse;
-        door.material.color.setHex(unlocked ? 0x6a4820 : 0x321848);
       }
       if (doorFlame?.material) {
         doorFlame.visible = true;
@@ -591,11 +921,17 @@ export function createWorld3D(canvas, options = {}) {
     const lookZ = p.y + Math.sin(p.angle) * cosP * lookDist;
     camera.lookAt(lookX, lookY, lookZ);
 
+    const reach =
+      data.torchReachScale != null && data.torchReachScale > 0
+        ? data.torchReachScale
+        : 1;
+
     torchLight.intensity = TORCH_BASE_INTENSITY + light * TORCH_LIGHT_INTENSITY;
-    torchLight.distance = TORCH_BASE_DISTANCE + light * TORCH_LIGHT_DISTANCE;
+    torchLight.distance =
+      (TORCH_BASE_DISTANCE + light * TORCH_LIGHT_DISTANCE) * reach;
     torchLight.color.setRGB(1.0, 0.58 + light * 0.12, 0.22 + light * 0.08);
 
-    const fogFar = 6.5 + light * 6;
+    const fogFar = (6.5 + light * 6) * reach;
     scene.fog.near = fogFar * 0.32;
     scene.fog.far = fogFar;
 
@@ -629,10 +965,62 @@ export function createWorld3D(canvas, options = {}) {
     render,
     resize,
     dispose,
-    // Rebuild wall/floor-grid geometry after the shared levelMap array is
-    // mutated in place (used to randomize the maze between runs).
-    rebuildLevel() {
-      shell.rebuildLevel();
+    getEditorApi() {
+      return {
+        scene,
+        camera,
+        renderer,
+        domElement: canvas,
+        listTargets() {
+          const targets = [];
+          for (let i = 0; i < lanternMeshes.length; i++) {
+            if (lanternMeshes[i]?.visible) {
+              targets.push({
+                id: `lantern:${i}`,
+                label: `Lantern ${i + 1}`,
+                scene: "world",
+              });
+            }
+          }
+          for (let i = 0; i < nullMeshes.length; i++) {
+            if (nullMeshes[i]?.visible) {
+              targets.push({
+                id: `null:${i}`,
+                label: `Null ${i + 1}`,
+                scene: "world",
+              });
+            }
+          }
+          if (exitMesh) {
+            targets.push({ id: "exit", label: "Exit vault door", scene: "world" });
+          }
+          return targets;
+        },
+        getObject(id) {
+          if (id === "exit") return exitMesh;
+          if (id.startsWith("lantern:")) {
+            const i = Number(id.slice(8));
+            return lanternMeshes[i] || null;
+          }
+          if (id.startsWith("null:")) {
+            const i = Number(id.slice(5));
+            return nullMeshes[i] || null;
+          }
+          return null;
+        },
+      };
+    },
+    // Rebuild shell after maze regen. Pass new map/dims when the grid size changes
+    // (Level 2+); same-size regenerations can omit args and mutate levelMap in place.
+    rebuildLevel(opts = {}) {
+      if (opts.levelMap) levelMap = opts.levelMap;
+      if (opts.mapRows != null) mapRows = opts.mapRows;
+      if (opts.mapCols != null) mapCols = opts.mapCols;
+      shell.rebuildLevel({
+        levelMap,
+        mapRows,
+        mapCols,
+      });
     },
   };
 }
@@ -763,28 +1151,26 @@ function loadCaveWallTextures(shell) {
 function loadCaveEnvironment(scene, mapRows, mapCols, shell) {
   const loader = new THREE.TextureLoader();
 
-  loader.load(
-    CAVE_FLOOR_URL,
-    (image) => {
-      const floorTex = makeTiledTexture(image, {
-        x: Math.max(2.2, mapCols / 3.2),
-        y: Math.max(1.6, mapRows / 2),
-      });
-      shell.setFloorTexture(floorTex);
-      shell.textures.push(floorTex);
-      console.log("[world3d] cave floor texture loaded");
-    },
-    undefined,
-    (err) => console.warn("[world3d] cave floor load failed", err)
-  );
+  // Floor is generated rather than loaded: a seamless cracked-flagstone tile
+  // with crystal light in the cracks. Keeps the path visually distinct from the
+  // crystal walls, and tiles without the seams a photo texture leaves behind.
+  // Both axes use the same divisor so slabs stay square instead of stretching.
+  const floorTex = makeTiledTexture(createStonePathCanvas(), {
+    x: Math.max(2, mapCols / FLOOR_TILE_WORLD_UNITS),
+    y: Math.max(2, mapRows / FLOOR_TILE_WORLD_UNITS),
+  });
+  shell.setFloorTexture(floorTex);
+  shell.textures.push(floorTex);
+  console.log("[world3d] stone path floor generated");
 
   loader.load(
     CAVE_ENV_URL,
-    (image) => {
-      const ceilingTex = makeCroppedTexture(image, CAVE_CROPS.ceiling, {
+    (loadedTex) => {
+      const ceilingTex = makeCroppedTexture(loadedTex.image, CAVE_CROPS.ceiling, {
         x: Math.max(2.2, mapCols / 4.5),
         y: Math.max(1.6, mapRows / 3.2),
       });
+      loadedTex.dispose();
 
       shell.setCeilingTexture(ceilingTex);
       shell.textures.push(ceilingTex);
@@ -811,10 +1197,13 @@ function wallHasFloorNeighbor(levelMap, row, col, mapRows, mapCols) {
   return false;
 }
 
-function buildShell(scene, levelMap, mapRows, mapCols) {
+function buildShell(scene, initialMap, initialRows, initialCols) {
   const textures = [];
   let ceilingMesh = null;
   let floorMesh = null;
+  let levelMap = initialMap;
+  let mapRows = initialRows;
+  let mapCols = initialCols;
   const wallMeshes = [];
   const wallFallbackMat = new THREE.MeshStandardMaterial({
     color: 0x5a5078,
@@ -823,31 +1212,36 @@ function buildShell(scene, levelMap, mapRows, mapCols) {
     side: THREE.DoubleSide,
   });
 
-  const floorGeo = new THREE.PlaneGeometry(mapCols, mapRows);
-  floorGeo.rotateX(-Math.PI / 2);
-  floorMesh = new THREE.Mesh(
-    floorGeo,
-    new THREE.MeshStandardMaterial({
-      color: 0x9088a8,
-      roughness: ENV_FLOOR_ROUGHNESS,
-      metalness: 0,
-      side: THREE.DoubleSide,
-    })
-  );
+  const floorMat = new THREE.MeshStandardMaterial({
+    color: 0x9088a8,
+    roughness: ENV_FLOOR_ROUGHNESS,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+  const ceilMat = new THREE.MeshStandardMaterial({
+    color: 0xc8c0d8,
+    roughness: ENV_CEIL_ROUGHNESS,
+    metalness: 0,
+    side: THREE.DoubleSide,
+  });
+
+  function makeFloorGeo(cols, rows) {
+    const geo = new THREE.PlaneGeometry(cols, rows);
+    geo.rotateX(-Math.PI / 2);
+    return geo;
+  }
+
+  function makeCeilGeo(cols, rows) {
+    const geo = new THREE.PlaneGeometry(cols, rows);
+    geo.rotateX(Math.PI / 2);
+    return geo;
+  }
+
+  floorMesh = new THREE.Mesh(makeFloorGeo(mapCols, mapRows), floorMat);
   floorMesh.position.set(mapCols * 0.5, 0.02, mapRows * 0.5);
   scene.add(floorMesh);
 
-  const ceilGeo = new THREE.PlaneGeometry(mapCols, mapRows);
-  ceilGeo.rotateX(Math.PI / 2);
-  ceilingMesh = new THREE.Mesh(
-    ceilGeo,
-    new THREE.MeshStandardMaterial({
-      color: 0xc8c0d8,
-      roughness: ENV_CEIL_ROUGHNESS,
-      metalness: 0,
-      side: THREE.DoubleSide,
-    })
-  );
+  ceilingMesh = new THREE.Mesh(makeCeilGeo(mapCols, mapRows), ceilMat);
   ceilingMesh.position.set(mapCols * 0.5, CEILING_HEIGHT, mapRows * 0.5);
   scene.add(ceilingMesh);
 
@@ -862,6 +1256,19 @@ function buildShell(scene, levelMap, mapRows, mapCols) {
   });
   let gridLines = null;
   let wallBaseTextures = null;
+
+  function resizeShellPlanes() {
+    if (floorMesh) {
+      floorMesh.geometry?.dispose?.();
+      floorMesh.geometry = makeFloorGeo(mapCols, mapRows);
+      floorMesh.position.set(mapCols * 0.5, 0.02, mapRows * 0.5);
+    }
+    if (ceilingMesh) {
+      ceilingMesh.geometry?.dispose?.();
+      ceilingMesh.geometry = makeCeilGeo(mapCols, mapRows);
+      ceilingMesh.position.set(mapCols * 0.5, CEILING_HEIGHT, mapRows * 0.5);
+    }
+  }
 
   function buildWalls() {
     // Clear any existing wall meshes (used for maze regeneration).
@@ -925,12 +1332,32 @@ function buildShell(scene, levelMap, mapRows, mapCols) {
 
   function applyWallTextures(baseTextures) {
     wallBaseTextures = baseTextures;
+    if (!baseTextures.length) return;
+
+    const seed =
+      (mapCols * 73856093) ^
+      (mapRows * 19349663) ^
+      (wallMeshes.length * 83492791) ^
+      ((Math.random() * 0xffffffff) >>> 0);
+    assignWallTextureIndices(wallMeshes, baseTextures.length, seed);
+
     for (const group of wallMeshes) {
       const col = group.userData.wallCol;
       const row = group.userData.wallRow;
-      const idx = (col * 13 + row * 7) % baseTextures.length;
+      const idx =
+        group.userData.wallTexIdx != null
+          ? group.userData.wallTexIdx
+          : (col * 13 + row * 7) % baseTextures.length;
       const tex = baseTextures[idx].clone();
-      tex.offset.set((col % 5) * 0.19, (row % 4) * 0.21);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      tex.repeat.set(WALL_TEX_REPEAT_U, WALL_TEX_REPEAT_V);
+      // Slight per-cell crop so non-adjacent repeats of the same plate still vary.
+      const jitter = ((col * 17 + row * 31) % 100) / 100;
+      tex.offset.set(
+        (jitter * (1 - WALL_TEX_REPEAT_U)) % 1,
+        (((col + row) * 0.37) % 1) * (1 - WALL_TEX_REPEAT_V)
+      );
       tex.needsUpdate = true;
 
       const mat = new THREE.MeshStandardMaterial({
@@ -958,7 +1385,14 @@ function buildShell(scene, levelMap, mapRows, mapCols) {
     textures,
     vistaMaterial: null,
     setWallTextures: applyWallTextures,
-    rebuildLevel() {
+    rebuildLevel(opts = {}) {
+      if (opts.levelMap) levelMap = opts.levelMap;
+      const nextRows = opts.mapRows != null ? opts.mapRows : mapRows;
+      const nextCols = opts.mapCols != null ? opts.mapCols : mapCols;
+      const sizeChanged = nextRows !== mapRows || nextCols !== mapCols;
+      mapRows = nextRows;
+      mapCols = nextCols;
+      if (sizeChanged) resizeShellPlanes();
       buildWalls();
       buildGrid();
       if (wallBaseTextures) applyWallTextures(wallBaseTextures);
@@ -980,7 +1414,7 @@ function buildShell(scene, levelMap, mapRows, mapCols) {
       const prev = floorMesh.material;
       floorMesh.material = new THREE.MeshStandardMaterial({
         map: tex,
-        color: 0xffffff,
+        color: ENV_FLOOR_TINT,
         roughness: ENV_FLOOR_ROUGHNESS,
         metalness: 0,
         side: THREE.DoubleSide,
@@ -1003,8 +1437,7 @@ function buildShell(scene, levelMap, mapRows, mapCols) {
       floorMesh?.material?.dispose?.();
       this.vistaMaterial?.dispose?.();
       floorMesh?.geometry?.dispose?.();
-      floorGeo.dispose();
-      ceilGeo.dispose();
+      ceilingMesh?.geometry?.dispose?.();
       if (gridLines) {
         scene.remove(gridLines);
         gridLines.geometry?.dispose?.();

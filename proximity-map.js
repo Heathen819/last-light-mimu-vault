@@ -31,7 +31,9 @@ function sampleIllum(wx, wy, player, viewDist, lanterns) {
  * @param {{ levelMap: number[][], mapRows: number, mapCols: number }} opts
  */
 export function createProximityMap(canvas, opts) {
-  const { levelMap, mapRows, mapCols } = opts;
+  let levelMap = opts.levelMap;
+  let mapRows = opts.mapRows;
+  let mapCols = opts.mapCols;
   const ctx = canvas.getContext("2d");
   const half = MAP_SIZE / 2;
   const tileRadius = Math.ceil(half / PX_PER_TILE) + 1;
@@ -41,6 +43,12 @@ export function createProximityMap(canvas, opts) {
   floorFill.addColorStop(0, "rgba(88, 72, 128, 0.92)");
   floorFill.addColorStop(1, "rgba(58, 44, 96, 0.92)");
   const wallFill = "rgba(36, 24, 62, 0.95)";
+
+  function setMap(nextMap, nextRows, nextCols) {
+    levelMap = nextMap;
+    mapRows = nextRows;
+    mapCols = nextCols;
+  }
 
   function draw(data) {
     if (!ctx || !data?.player) return;
@@ -141,5 +149,5 @@ export function createProximityMap(canvas, opts) {
     ctx.fillRect(0, 0, MAP_SIZE, MAP_SIZE);
   }
 
-  return { draw, size: MAP_SIZE };
+  return { draw, setMap, size: MAP_SIZE };
 }

@@ -7,12 +7,7 @@
    ============================================ */
 
 export const MENU_TRACKS = [
-  "assets/audio/deus-avarus-menu.mp3",
-  "assets/audio/music/Something Down Here (Dark Male Version).mp3",
-  "assets/audio/music/mixkit-ritual-synth-suspense-683.wav",
-  "assets/audio/music/They Will Destroy instrumental.mp3",
-  "assets/audio/music/Me-Moo Vault (1).mp3",
-  "assets/audio/music/Greed.mp3",
+  "assets/audio/Tilt-a-whisper edited.mp3",
 ];
 
 // Tunable constants
