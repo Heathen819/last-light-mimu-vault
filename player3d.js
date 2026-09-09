@@ -39,7 +39,7 @@ const SELECTIVE_BLOOM_MIX_SHADER = {
     }`,
 };
 
-const MODEL_URL = "assets/player/banker_torch_animated_18.glb";
+const MODEL_URL = "assets/player/banker_torch_animated_19_decimated.glb?v=avatar19";
 /** Neutral cone-flame emissive (orange torch crystal). */
 const NEUTRAL_FLAME_EMISSIVE = { r: 1.0, g: 0.42, b: 0.08 };
 /** Avatar GLB includes torch mesh on the raised arm (R_Forearm / R_Hand rig). */

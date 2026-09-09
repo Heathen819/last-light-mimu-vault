@@ -119,7 +119,7 @@ import {
 
   async function initPlayer3D() {
     if (!USE_3D_PLAYER || !player3dCanvas) return;
-    const { createPlayer3D } = await import("./player3d.js?v=place_9");
+    const { createPlayer3D } = await import("./player3d.js?v=avatar19");
     player3d = createPlayer3D(player3dCanvas);
     window.__player3d = player3d;
     syncViewportSize();

@@ -26,7 +26,8 @@ cp "$ROOT/index.html" "$ROOT/leaderboard.html" "$ROOT/lore.html" "$ROOT/sign-in.
 cp "$ROOT/game.js" "$ROOT/world3d.js" "$ROOT/player3d.js" "$ROOT/enemysprite.js" "$ROOT/site-nav.js" "$ROOT/ui-sfx.js" "$ROOT/auth.js" "$ROOT/music-player.js" "$ROOT/proximity-map.js" "$ROOT/placement-offsets.js" "$ROOT/placement-editor.js" "$ROOT/stone-path-texture.js" "$DEST/"
 
 echo "Packing 3D models..."
-cp "$ROOT/assets/player/banker_torch_animated_18.glb" "$DEST/assets/player/"
+# Decimated banker avatar (61k tris / 9.6 MB, down from 1.96M tris / 79 MB).
+cp "$ROOT/assets/player/banker_torch_animated_19_decimated.glb" "$DEST/assets/player/"
 # Decimated Null enemies (~550k tris / 23 MB each, down from 4M tris / 96 MB).
 cp "$ROOT/assets/enemies/green_Null_decimated_small.glb" "$DEST/assets/enemies/"
 cp "$ROOT/assets/enemies/purple_Null_decimated_small.glb" "$DEST/assets/enemies/"
