@@ -778,7 +778,7 @@ import {
   async function initWorld3D() {
     if (!USE_3D_WORLD) return;
     try {
-      const { createWorld3D } = await import("./world3d.js?v=null4");
+      const { createWorld3D } = await import("./world3d.js?v=null5");
       world3d = createWorld3D(canvas, {
         levelMap: LEVEL_MAP,
         mapRows: MAP_ROWS,
@@ -2602,6 +2602,7 @@ import {
         light,
         bob: bob / 4,
         animTime,
+        dt: frameDt,
         torchReachScale: levelRuntime.torchReachScale,
       });
       world3d.render();

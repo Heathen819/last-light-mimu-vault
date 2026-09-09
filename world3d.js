@@ -13,6 +13,8 @@ const NULL_GLB_VARIANTS = [
   "assets/enemies/purple_Null_decimated_small.glb?v=null4",
 ];
 const NULL_FLOAT_BASE_Y = 0.34;
+/** How fast a Null swings to face its movement direction (per second, ~0.1 s to settle). */
+const NULL_TURN_RATE = 9;
 const LANTERN_URL = "assets/objects/lanterns/rock-crystal-lantern.glb";
 /** Sink lantern mesh so the rock base meets the floor (negative = lower). */
 const LANTERN_Y_OFFSET = -0.12;
@@ -810,13 +812,24 @@ export function createWorld3D(canvas, options = {}) {
       if (nullMeshes[i]) nullMeshes[i].visible = false;
     }
 
+    const turnDt = Math.min(0.05, Math.max(0, data.dt ?? 1 / 60));
     shadows.forEach((shadow, i) => {
       const mesh = ensureNullMesh(i, shadow);
       if (!mesh) return;
       const bob = shadow.bob || 0;
+      // The Null GLBs face +X in model space (the two bright eyes sit on the
+      // +X side). game.js tracks faceAngle as atan2(dz, dx) in map space, and
+      // a three.js rotation.y of phi points +X along (cos phi, -sin phi), so
+      // the yaw that makes the eyes lead the movement is -faceAngle.
+      const targetYaw = -(shadow.faceAngle ?? 0);
+      const prevYaw = mesh.userData.yaw ?? targetYaw;
+      let delta = targetYaw - prevYaw;
+      delta = Math.atan2(Math.sin(delta), Math.cos(delta)); // shortest arc
+      const yaw = prevYaw + delta * Math.min(1, NULL_TURN_RATE * turnDt);
+      mesh.userData.yaw = yaw;
       const base = {
         position: { x: shadow.x, y: bob + NULL_FLOAT_BASE_Y, z: shadow.y },
-        rotation: { x: 0, y: shadow.faceAngle ?? 0, z: 0 },
+        rotation: { x: 0, y: yaw, z: 0 },
         scale: { x: 1, y: 1, z: 1 },
       };
       applyPlacementFor(mesh, `null:${i}`, base);
