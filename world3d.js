@@ -9,8 +9,8 @@ import { applyPlacementFor } from "./placement-offsets.js?v=2";
 import { createStonePathCanvas } from "./stone-path-texture.js?v=2";
 
 const NULL_GLB_VARIANTS = [
-  "assets/enemies/null-black-gray-green-eyes3.glb?v=null1",
-  "assets/enemies/null-black-purple.glb?v=null1",
+  "assets/enemies/green_Null_decimated_small.glb?v=null4",
+  "assets/enemies/purple_Null_decimated_small.glb?v=null4",
 ];
 const NULL_FLOAT_BASE_Y = 0.34;
 const LANTERN_URL = "assets/objects/lanterns/rock-crystal-lantern.glb";

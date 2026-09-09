@@ -67,7 +67,7 @@ import {
   const EXIT_INTERACT_RANGE = 1.2;
 
   // Nulls (variant GLBs loaded by world3d.js)
-  const NULL_GLB = "assets/enemies/null-black-purple.glb";
+  const NULL_GLB = "assets/enemies/purple_Null_decimated_small.glb";
   const SHADOW_RADIUS = 0.35;
   const SHADOW_DEAGGRO_RANGE = 5.2;
   const SHADOW_CHASE_COOLDOWN = 2.4;
@@ -125,7 +125,9 @@ import {
     syncViewportSize();
   }
 
-  const enemySprite = createEnemySprite();
+  // The baked 2D sprite is only drawn by the legacy 2D renderer. In 3D mode
+  // world3d.js loads the Null GLBs itself, so skip the extra download + bake.
+  const enemySprite = USE_3D_WORLD ? null : createEnemySprite();
   window.__enemySprite = enemySprite;
 
   // PNG fallback
@@ -776,7 +778,7 @@ import {
   async function initWorld3D() {
     if (!USE_3D_WORLD) return;
     try {
-      const { createWorld3D } = await import("./world3d.js?v=level3_2");
+      const { createWorld3D } = await import("./world3d.js?v=null4");
       world3d = createWorld3D(canvas, {
         levelMap: LEVEL_MAP,
         mapRows: MAP_ROWS,
