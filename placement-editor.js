@@ -692,6 +692,10 @@ export function createPlacementEditor(opts) {
 
 export function shouldAutoOpenPlacementEditor() {
   try {
+    // Development-only: ignore ?edit=1 anywhere except a local test server.
+    const h = window.location.hostname;
+    const isLocal = h === "localhost" || h === "127.0.0.1" || h === "[::1]";
+    if (!isLocal) return false;
     return new URLSearchParams(window.location.search).get("edit") === "1";
   } catch {
     return false;

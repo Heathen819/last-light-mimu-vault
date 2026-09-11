@@ -12,7 +12,7 @@ import { createProximityMap } from "./proximity-map.js?v=2";
 import {
   createPlacementEditor,
   shouldAutoOpenPlacementEditor,
-} from "./placement-editor.js?v=10";
+} from "./placement-editor.js?v=11";
 
 (() => {
   "use strict";
@@ -2716,14 +2716,18 @@ import {
 
   // Boot — land on the main menu
   Promise.all([initPlayer3D(), initWorld3D()]).then(() => {
-    placementEditor = createPlacementEditor({
-      worldApi: () => world3d?.getEditorApi?.() || null,
-      playerApi: () => player3d?.getEditorApi?.() || null,
-      isPlaying: () => state.status === "playing",
-      onActiveChange(active) {
-        setEditGameplayPaused(active);
-      },
-    });
+    // The placement editor (F2 / ?edit=1) is a development tool only.
+    // Never build it on the public site — players must not be able to open it.
+    if (isLocalDevHost()) {
+      placementEditor = createPlacementEditor({
+        worldApi: () => world3d?.getEditorApi?.() || null,
+        playerApi: () => player3d?.getEditorApi?.() || null,
+        isPlaying: () => state.status === "playing",
+        onActiveChange(active) {
+          setEditGameplayPaused(active);
+        },
+      });
+    }
     mountDevLevelPicker();
     showMainMenu();
     requestAnimationFrame(frame);
