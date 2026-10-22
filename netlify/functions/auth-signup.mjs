@@ -1,17 +1,19 @@
 import { connectLambda, getStore } from "@netlify/blobs";
 import { hashPassword } from "../lib/crypto-auth.mjs";
 import { jsonResponse, handleOptions } from "../lib/http.mjs";
-import { signToken } from "../lib/jwt.mjs";
+import { getAuthSecret, signToken } from "../lib/jwt.mjs";
 import { validateCredentials } from "../lib/validate.mjs";
-
-function getAuthSecret() {
-  return process.env.AUTH_SECRET || "mimu-vault-dev-secret-change-me";
-}
 
 export async function handler(event) {
   if (event.httpMethod === "OPTIONS") return handleOptions();
   if (event.httpMethod !== "POST") {
     return jsonResponse(405, { error: "Method not allowed." });
+  }
+
+  const secret = getAuthSecret();
+  if (!secret) {
+    console.error("AUTH_SECRET is not set; refusing to handle auth requests.");
+    return jsonResponse(500, { error: "Server is not configured for sign-in." });
   }
 
   let body;
@@ -43,7 +45,7 @@ export async function handler(event) {
 
   const token = signToken(
     { name: checked.displayName, nameKey: checked.nameKey },
-    getAuthSecret()
+    secret
   );
 
   return jsonResponse(201, {

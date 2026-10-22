@@ -1,5 +1,14 @@
 import crypto from "node:crypto";
 
+// The old hard-coded fallback; treat it as unset so a copied value can't sign tokens.
+const PLACEHOLDER_SECRET = "mimu-vault-dev-secret-change-me";
+
+export function getAuthSecret() {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret || secret === PLACEHOLDER_SECRET) return null;
+  return secret;
+}
+
 function b64url(value) {
   return Buffer.from(value).toString("base64url");
 }
