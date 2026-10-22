@@ -1,12 +1,8 @@
 import { connectLambda, getStore } from "@netlify/blobs";
 import { jsonResponse, handleOptions } from "../lib/http.mjs";
-import { verifyToken } from "../lib/jwt.mjs";
+import { getAuthSecret, verifyToken } from "../lib/jwt.mjs";
 
 const MAX_GLOBAL = 50;
-
-function getAuthSecret() {
-  return process.env.AUTH_SECRET || "mimu-vault-dev-secret-change-me";
-}
 
 function formatRunTime(totalSeconds) {
   const seconds = Math.max(0, Math.floor(totalSeconds));
@@ -27,8 +23,14 @@ export async function handler(event) {
     return jsonResponse(405, { error: "Method not allowed." });
   }
 
+  const secret = getAuthSecret();
+  if (!secret) {
+    console.error("AUTH_SECRET is not set; refusing to handle auth requests.");
+    return jsonResponse(500, { error: "Server is not configured for sign-in." });
+  }
+
   const token = getBearerToken(event);
-  const session = verifyToken(token, getAuthSecret());
+  const session = verifyToken(token, secret);
   if (!session?.name || !session?.nameKey) {
     return jsonResponse(401, { error: "Sign in to submit a global score." });
   }
